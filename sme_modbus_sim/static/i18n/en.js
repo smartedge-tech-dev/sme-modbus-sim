@@ -275,6 +275,7 @@ Shell.addStrings("en", {
   "scan.reason.float32_smooth_ambiguous": "float32 {order}: plausible values {values}, changing smoothly; {alt} is also plausible",
   "scan.reason.float32_constant_ambiguous": "float32 {order}: plausible constant values {values}; {alt} is also plausible",
   "scan.reason.int32_high_word_const": "{datatype} ABCD: the high word stays {high} while the low word changes",
+  "scan.reason.int32_zero_high_pairs": "uint32 ABCD: {pairs} consecutive register pairs with a zero high word",
   "scan.reason.ascii_run": "Printable ASCII text \"{text}\"",
   "scan.reason.int16_negative": "Values just below 0xFFFF, read as negative int16: {values}",
   "scan.reason.bool_bits": "Single bit",

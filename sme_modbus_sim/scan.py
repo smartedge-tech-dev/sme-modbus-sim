@@ -336,15 +336,39 @@ def guess_float32(w0: List[int], w1: List[int]) -> Optional[Dict[str, Any]]:
 
 
 def guess_int32(w0: List[int], w1: List[int]) -> Optional[Dict[str, Any]]:
-    """High word (first register, ABCD) constant 0x0000 / 0xFFFF while the low word changes -> int32 / uint32."""
-    if len(set(w1)) < 2 or not all(h in (0x0000, 0xFFFF) for h in w0):
+    """High word (first register, ABCD) constant while the low word changes -> int32 / uint32.
+
+    0x0000 / 0xFFFF high words are the classic case; a small constant high word (<= 0x00FF, e.g. a counter past
+    65535) is accepted with the same moderate confidence - it can also be a status word followed by a measurement,
+    which the user settles in the preview."""
+    if len(set(w1)) < 2 or len(set(w0)) != 1 or not (w0[0] in (0x0000, 0xFFFF) or w0[0] <= 0x00FF):
         return None
-    signed = any(h == 0xFFFF for h in w0)
+    signed = w0[0] == 0xFFFF
     dt = "int32" if signed else "uint32"
     conf = 0.7 if signed else 0.55
     return {"datatype": dt, "byte_order": "big", "word_order": "big", "confidence": conf, "count": 2,
-            "reason": f"{dt} ABCD: high word constant 0x{w0[0]:04X}-ish, low word changes",
+            "reason": f"{dt} ABCD: high word constant 0x{w0[0]:04X}, low word changes",
             "reason_code": "int32_high_word_const", "reason_params": {"datatype": dt, "high": f"0x{w0[0]:04X}"}}
+
+
+def guess_int32_pairs(run: List[List[int]], continuing: bool = False) -> Optional[Dict[str, Any]]:
+    """At least two consecutive (0x0000, non-zero) register pairs -> uint32 ABCD, even when the values are constant.
+
+    A table of 32-bit counters / energies that fit in 16 bits reads as 0, X, 0, Y, ...; a lone pair stays two
+    uint16 (equally plausible). Only ABCD is suggested: the CDAB reading (X, 0, Y, 0) is ambiguous with a
+    uint16 followed by ABCD pairs. ``continuing``: the previous registers were already such a pair, so one
+    more pair (the last of the series) is enough."""
+    pairs = 0
+    for i in range(0, len(run) - 1, 2):
+        hi, lo = run[i], run[i + 1]
+        if len(hi) != len(lo) or any(hi) or not all(lo):
+            break
+        pairs += 1
+    if pairs < (1 if continuing else 2):
+        return None
+    return {"datatype": "uint32", "byte_order": "big", "word_order": "big", "confidence": 0.6, "count": 2,
+            "reason": f"uint32 ABCD: {pairs} consecutive register pairs with a zero high word",
+            "reason_code": "int32_zero_high_pairs", "reason_params": {"pairs": pairs}}
 
 
 def _printable(w: int) -> Tuple[bool, int]:
@@ -370,6 +394,9 @@ def guess_string(words: List[List[int]]) -> Optional[Dict[str, Any]]:
     vals = [s[0] for s in words[:n]]
     if all(b - a == 1 for a, b in zip(vals, vals[1:])):
         # Consecutive integers (e.g. 30502, 30503, ... - a test pattern or a counter table) only look like text.
+        return None
+    if len({v >> 8 for v in vals}) == 1:
+        # The same high byte in every register ('uLuNuO...' = 30028, 30030, 30031): a run of close numbers.
         return None
     text = b"".join(struct.pack(">H", s[0]) for s in words[:n]).rstrip(b"\x00").decode("ascii")
     return {"datatype": "string", "byte_order": "big", "word_order": "big", "count": n,
@@ -397,8 +424,13 @@ def guess_bool(samples: List[int]) -> Dict[str, Any]:
 # Every ``reason_code`` the heuristics can emit (the web UI localises ``scan.reason.<code>`` with
 # ``reason_params``; ``reason`` stays the English text for the CLI YAML comments and API clients).
 REASON_CODES = ("float32_smooth", "float32_constant", "float32_smooth_ambiguous", "float32_constant_ambiguous",
-                "int32_high_word_const", "ascii_run", "int16_negative", "bool_bits", "bool_bits_changing",
+                "int32_high_word_const", "int32_zero_high_pairs", "ascii_run", "int16_negative", "bool_bits", "bool_bits_changing",
                 "default")
+
+
+def _float_follows(run: List[List[int]]) -> bool:
+    """A float32 starting at the next register: the current one is then a 16-bit value, not an int32 high word."""
+    return len(run) >= 3 and len(run[1]) == len(run[2]) and guess_float32(run[1], run[2]) is not None
 
 
 def suggest(table: str, samples: Dict[int, List[int]]) -> List[Dict[str, Any]]:
@@ -421,9 +453,11 @@ def suggest(table: str, samples: Dict[int, List[int]]) -> List[Dict[str, Any]]:
                 run.append(samples[b])
                 b += 1
             pair = len(run) >= 2 and len(run[0]) == len(run[1])
-            g = (guess_string(run)
+            g = (guess_int32_pairs(run, continuing=bool(out) and out[-1]["reason_code"] == "int32_zero_high_pairs"
+                                   and out[-1]["address"] + 2 == a)
+                 or guess_string(run)
                  or (guess_float32(run[0], run[1]) if pair else None)
-                 or (guess_int32(run[0], run[1]) if pair else None)
+                 or (guess_int32(run[0], run[1]) if pair and not _float_follows(run) else None)
                  or guess_int16(s)
                  or {"datatype": "uint16", "byte_order": "big", "word_order": "big", "count": 1,
                      "confidence": 0.5, "reason": "default (no stronger pattern)", "reason_code": "default",

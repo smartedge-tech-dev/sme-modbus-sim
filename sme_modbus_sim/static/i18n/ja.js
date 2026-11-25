@@ -273,6 +273,7 @@ Shell.addStrings("ja", {
   "scan.reason.float32_smooth_ambiguous": "float32 {order}：妥当な値 {values}（滑らかに変化）。{alt} でも妥当",
   "scan.reason.float32_constant_ambiguous": "float32 {order}：妥当な値 {values}（一定）。{alt} でも妥当",
   "scan.reason.int32_high_word_const": "{datatype} ABCD：上位ワードが {high} のまま、下位ワードが変化",
+  "scan.reason.int32_zero_high_pairs": "uint32 ABCD：上位ワードが 0 のレジスタ対が {pairs} 組連続",
   "scan.reason.ascii_run": "印字可能な ASCII 文字列「{text}」",
   "scan.reason.int16_negative": "0xFFFF 直下の値を int16 の負数と解釈：{values}",
   "scan.reason.bool_bits": "単一ビット",

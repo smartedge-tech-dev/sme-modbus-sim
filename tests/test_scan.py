@@ -497,3 +497,28 @@ def test_consecutive_integers_are_not_guessed_as_string():
     # 30502..30505 = "w&w'w(w)" in ASCII: seen on a real device that holds each register's own address.
     assert guess_string([[30502] * 3, [30503] * 3, [30504] * 3, [30505] * 3]) is None
     assert guess_string([[0x534D] * 2, [0x4152] * 2, [0x5400] * 2])["datatype"] == "string"  # "SMART"
+
+
+def test_zero_high_word_pairs_are_guessed_as_uint32():
+    from sme_modbus_sim.scan import suggest
+    # Seen on a real device: 20 = int16, then 21-22 / 23-24 / 25-26 / 27-28 = uint32 ABCD with constant values.
+    raw = {20: 30021, 21: 0, 22: 30022, 23: 0, 24: 30024, 25: 0, 26: 30026, 27: 0, 28: 30028,
+           29: 30030, 30: 30031, 31: 30032, 32: 30033}
+    out = {s["address"]: s for s in suggest("input", {a: [v] * 3 for a, v in raw.items()})}
+    assert out[20]["datatype"] == "uint16"
+    for a in (21, 23, 25, 27):
+        assert out[a]["datatype"] == "uint32" and out[a]["word_order"] == "big" and out[a]["value"] == raw[a + 1]
+    assert all(s["datatype"] != "string" for s in out.values())
+
+
+def test_lone_zero_high_pair_stays_uint16():
+    from sme_modbus_sim.scan import suggest
+    out = suggest("input", {0: [0] * 3, 1: [500] * 3, 2: [7] * 3})
+    assert [s["datatype"] for s in out] == ["uint16", "uint16", "uint16"]
+
+
+def test_small_constant_high_word_with_changing_low_word_is_uint32():
+    from sme_modbus_sim.scan import suggest
+    # Seen on a real device: a counter started at 165580 = 0x0002_86CC (ABCD) and incrementing.
+    out = suggest("input", {21: [2, 2, 2], 22: [34508, 34510, 34512]})
+    assert out[0]["datatype"] == "uint32" and out[0]["count"] == 2 and out[0]["value"] == 2 * 65536 + 34512

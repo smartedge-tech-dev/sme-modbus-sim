@@ -273,6 +273,7 @@ Shell.addStrings("zh", {
   "scan.reason.float32_smooth_ambiguous": "float32 {order}：数值合理 {values}（平滑变化）；按 {alt} 解读也合理",
   "scan.reason.float32_constant_ambiguous": "float32 {order}：数值合理 {values}（恒定）；按 {alt} 解读也合理",
   "scan.reason.int32_high_word_const": "{datatype} ABCD：高位字保持 {high}，低位字在变化",
+  "scan.reason.int32_zero_high_pairs": "uint32 ABCD：连续 {pairs} 对寄存器的高位字为 0",
   "scan.reason.ascii_run": "可打印 ASCII 文本「{text}」",
   "scan.reason.int16_negative": "接近 0xFFFF 的值，按 int16 负数解读：{values}",
   "scan.reason.bool_bits": "单个位",
