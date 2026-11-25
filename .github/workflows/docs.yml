@@ -26,13 +26,19 @@ jobs:
           cache-dependency-path: requirements-docs.txt
       - run: pip install -r requirements-docs.txt
       - run: mkdocs build --strict
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      # Pages deploy only runs once the repository is public (Pages is not
+      # enabled while the repo is private); until then this job just checks
+      # that the docs build cleanly.
+      - if: ${{ !github.event.repository.private }}
+        uses: actions/configure-pages@v5
+      - if: ${{ !github.event.repository.private }}
+        uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
     needs: build
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
