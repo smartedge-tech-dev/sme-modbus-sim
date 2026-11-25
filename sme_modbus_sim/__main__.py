@@ -33,6 +33,14 @@ DEFAULT_HTTP_PORT = 8081  # series port table (sme-sim-common README)
 DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "configs" / "demo-site.yaml"
 
 
+def _progress(text: str) -> None:
+    """One progress line on stderr: rewritten in place on a terminal, one line each when redirected."""
+    if sys.stderr.isatty():
+        print("\r" + text, end="", file=sys.stderr, flush=True)
+    else:
+        print(text, file=sys.stderr, flush=True)
+
+
 def _load_templates(directory) -> None:
     from .templates import load_user_templates
 
@@ -138,8 +146,7 @@ def _scan(argv) -> int:
         return rc
 
     def progress(p):
-        print(f"\r{p['phase']}: {p['requests']}/{p['estimate']} requests, {p['found']} readable",
-              end="", file=sys.stderr, flush=True)
+        _progress(f"{p['phase']}: {p['requests']}/{p['estimate']} requests, {p['found']} readable")
 
     async def run():
         async with client:
@@ -219,7 +226,7 @@ def _record(argv) -> int:
         return rc
 
     def progress(p):
-        print(f"\rrow {p['rows']}/{p['cycles']}, failed reads {p['failed']}", end="", file=sys.stderr, flush=True)
+        _progress(f"row {p['rows']}/{p['cycles']}, failed reads {p['failed']}")
 
     async def run():
         async with client:

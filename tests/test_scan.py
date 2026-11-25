@@ -484,3 +484,9 @@ def test_rest_attach_replay_refuses_empty_first_row(client):
     r = client.post("/api/scan/apply/replay", json={"device": "D"})
     assert r.status_code == 400 and "ro" in r.json()["detail"] and "first row" in r.json()["detail"]
     assert next(d for d in client.engine.config.devices if d.name == "D").points[0].behavior is None
+
+
+def test_parse_range_accepts_plural_table_names():
+    from sme_modbus_sim.scan import parse_range
+    assert parse_range("coils:0-15") == parse_range("coil:0-15")
+    assert parse_range("holdings:3").table == "holding"

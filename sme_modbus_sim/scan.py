@@ -59,11 +59,13 @@ class ScanRange:
         return {"table": self.table, "start": self.start, "count": self.count}
 
 
-_RANGE_RE = re.compile(r"^\s*(coil|discrete|input|holding)\s*:\s*(\d+)\s*(?:-\s*(\d+))?\s*$")
+_RANGE_RE = re.compile(r"^\s*(coil|discrete|input|holding)s?\s*:\s*(\d+)\s*(?:-\s*(\d+))?\s*$")
 
 
 def parse_range(v: Any) -> ScanRange:
-    """``"holding:0-99"`` (inclusive), ``"coil:5"`` or ``{"table", "start", "count"}``."""
+    """``"holding:0-99"`` (inclusive), ``"coil:5"`` or ``{"table", "start", "count"}``.
+
+    Plural table names (``coils:0-15``) are accepted too."""
     if isinstance(v, ScanRange):
         r = v
     elif isinstance(v, str):
