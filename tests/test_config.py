@@ -163,3 +163,30 @@ def test_sunspec_sf_datatype_scale_ref_and_nullable():
     with pytest.raises(ValueError, match="nullable"):
         SimConfig.model_validate({"devices": [{"name": "d", "unit_id": 1, "points": [
             {"name": "s", "table": "holding", "address": 0, "datatype": "string", "count": 2, "nullable": True}]}]})
+
+
+# ---- point names reserved in behavior expressions (t / dt / hour / pv and the FUNCTIONS whitelist)
+
+
+@pytest.mark.parametrize("name", ["t", "dt", "hour", "pv", "sin", "clamp", "noise", "max"])
+def test_reserved_point_names(name):
+    from pydantic import ValidationError as _VE
+
+    with pytest.raises(_VE, match="reserved in behavior expressions"):
+        parse_text(f"devices: [{{name: X, unit_id: 1, points: [{{name: '{name}', table: holding}}]}}]")
+
+
+def test_reserved_names_cover_functions_and_allow_lookalikes():
+    from sme_modbus_sim.behaviors import FUNCTIONS
+    from sme_modbus_sim.config import reserved_names
+
+    assert {"t", "dt", "hour", "pv"} | set(FUNCTIONS) == reserved_names()
+    pts = ", ".join(f"{{name: '{n}', table: holding, address: {i}}}" for i, n in enumerate(["T", "p-v", "t1", "sin_x"]))
+    parse_text(f"devices: [{{name: X, unit_id: 1, points: [{pts}]}}]")  # ident() differs from every reserved name
+
+
+def test_reserved_names_in_template_overrides():
+    from pydantic import ValidationError as _VE
+
+    with pytest.raises(_VE, match="'hour'"):
+        parse_text("devices: [{name: X, unit_id: 1, template: env_sensor, points: [{name: hour, table: holding}]}]")

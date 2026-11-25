@@ -74,6 +74,7 @@ nav:
       - behaviors-templates.md
       - excel.md
       - faults.md
+      - device-management.md
   - Reference:
       - http-api.md
       - changelog.md

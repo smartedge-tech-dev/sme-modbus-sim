@@ -51,6 +51,7 @@ log = logging.getLogger("sme_modbus_sim")
 TRACE_SIZE = 2000
 EVENT_SIZE = 200
 QUEUE_SIZE = 1000
+STATS_INTERVAL = 2.0  # seconds
 WRAPPING_BEHAVIORS = ("counter", "pulse")
 INT_TYPES = ("uint16", "int16", "uint32", "int32", "uint64", "int64")
 FLOAT_TYPES = ("float32", "float64")
@@ -380,6 +381,8 @@ class Engine:
         self.stats: Dict[str, ListenerStats] = {}
         self.servers: Dict[str, ModbusTcpServer] = {}
         self._subs: List[asyncio.Queue] = []
+        self.stats_interval = STATS_INTERVAL  # seconds between {"type": "stats"} pushes on /ws
+        self._stats_at = 0.0
         self._last: Dict[Tuple[str, str], Any] = {}
         self._task: Optional[asyncio.Task] = None
         self._scan: Optional[asyncio.Event] = None
@@ -678,6 +681,9 @@ class Engine:
                     if sim.running:
                         self.step(sim.tick_seconds * sim.time_scale)
                     self._scan_changes()
+                if self._subs and now >= self._stats_at:  # per-listener counters, only while someone listens
+                    self._stats_at = now + self.stats_interval
+                    self.publish({"type": "stats", "t": time.time(), "stats": self.stats_snapshot()})
                 nxt = max(nxt + sim.tick_seconds, loop.time())
             try:
                 await asyncio.wait_for(self._scan.wait(), timeout=max(0.0, nxt - loop.time()))

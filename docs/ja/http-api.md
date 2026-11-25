@@ -46,3 +46,28 @@ curl -X POST http://127.0.0.1:8080/api/devices/PCS-1/points/p_setpoint/write \
 | `GET` | `/api/faults/export` | ルールを `faults.json` で返す |
 
 変更は `/ws` に `{"type": "faults", "rules": [...]}` として配信されます。[故障注入](faults.md) を参照。
+
+## デバイス管理
+
+| メソッド | パス | 説明 |
+|---|---|---|
+| `POST` | `/api/devices` | デバイスを追加（JSON：`name`、`unit_id`、任意で `listeners`、`template`、`params`、`points` など） |
+| `POST` | `/api/devices/{name}/duplicate` | デバイスを複製。任意の JSON `{"name", "unit_id"}`。省略時は `{name}_copy` と、同じリスナー上の次の空きユニット ID |
+| `DELETE` | `/api/devices/{name}` | デバイスを削除 |
+| `GET` | `/api/devices/{name}/config` | そのデバイスの設定（YAML） |
+| `PUT` | `/api/devices/{name}/config` | 本文の YAML でそのデバイスを置き換え（名前の変更も可） |
+
+変更はすべて検証のうえ、`PUT /api/config` と同じ再読込で反映されます。実行中の設定はモデルから書き直されます
+（指定したキーのみ残り、YAML のコメントは失われます）。ファイルへの保存は `POST /api/config/save` です。
+エラー：`404` 不明なデバイス、`409` 名前の重複、`400` 検証エラー（pydantic のエラーを `field: message` で列挙）。
+[デバイス管理](device-management.md) を参照してください。
+
+## 統計のプッシュ
+
+クライアントが 1 つ以上接続している間、`/ws` はリスナーごとのカウンタを 2 秒ごとに送信します。
+
+```json
+{"type": "stats", "t": 1764052800.0, "stats": {"tcp1": {"type": "tcp", "requests": {"3": 120}, "exceptions": {}, "clients": 1}}}
+```
+
+`stats` の形式は `GET /api/stats` と同じです。

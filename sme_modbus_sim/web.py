@@ -12,7 +12,7 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 import yaml
@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
 from . import __version__
-from .config import parse_text
+from .config import DeviceConfig, SimConfig, parse_text
 from .engine import Engine
 from . import templates as tpl
 from .templates import template_catalog
@@ -46,6 +46,17 @@ class SaveTemplateReq(BaseModel):
 class SimulationReq(BaseModel):
     running: Optional[bool] = None
     time_scale: Optional[float] = None
+
+
+class DuplicateReq(BaseModel):
+    name: Optional[str] = None
+    unit_id: Optional[int] = None
+
+
+def next_free_unit(cfg: SimConfig, listeners: List[str]) -> Optional[int]:
+    """Lowest unit id 1..247 not used by any device sharing one of ``listeners``."""
+    used = {d.unit_id for d in cfg.devices if set(cfg.device_listeners(d)) & set(listeners)}
+    return next((u for u in range(1, 248) if u not in used), None)
 
 
 def _bad(e: Exception) -> HTTPException:
@@ -143,6 +154,99 @@ def create_app(engine: Engine, config_path: Optional[str | Path] = None) -> Fast
             raise _bad(e) from None
         sim = engine.config.simulation
         return {"running": sim.running, "time_scale": sim.time_scale}
+
+    # ---- device management: edits the configuration model and re-dumps it like the Excel import (comments are lost)
+
+    def device_dicts() -> List[Dict[str, Any]]:
+        return [d.model_dump(mode="json", exclude_unset=True, exclude_none=True) for d in engine.config.devices]
+
+    def device_index(name: str) -> int:
+        for i, d in enumerate(engine.config.devices):
+            if d.name == name:
+                return i
+        raise HTTPException(404, f"unknown device {name!r}")
+
+    def name_free(name: Any, skip: Optional[str] = None) -> None:
+        if any(d.name == name and d.name != skip for d in engine.config.devices):
+            raise HTTPException(409, f"device {name!r} already exists")
+
+    async def apply_devices(devices: List[Dict[str, Any]]) -> None:
+        data = engine.config.model_dump(mode="json", exclude_unset=True, exclude_none=True)
+        data["devices"] = devices
+        try:
+            cfg = SimConfig.model_validate(data)
+            await engine.reload(cfg, to_yaml(cfg))
+        except Exception as e:  # validation, behavior compile or bind errors; the old config keeps running
+            raise _bad(e) from None
+
+    def parse_device(data: Any) -> Dict[str, Any]:
+        if not isinstance(data, dict):
+            raise HTTPException(400, "a device is a JSON / YAML object")
+        try:
+            dev = DeviceConfig.model_validate(data)
+        except ValidationError as e:
+            raise _bad(e) from None
+        return dev.model_dump(mode="json", exclude_unset=True, exclude_none=True)
+
+    @app.post("/api/devices")
+    async def device_create(request: Request):
+        try:
+            data = json.loads(await request.body() or b"{}")
+        except ValueError as e:
+            raise HTTPException(400, f"invalid JSON: {e}") from None
+        dev = parse_device(data)
+        name_free(dev["name"])
+        await apply_devices(device_dicts() + [dev])
+        engine.log_event("config", f"device {dev['name']} added (unit {dev['unit_id']})")
+        return {"ok": True, "name": dev["name"], "unit_id": dev["unit_id"]}
+
+    @app.post("/api/devices/{device}/duplicate")
+    async def device_duplicate(device: str, req: Optional[DuplicateReq] = None):
+        req = req or DuplicateReq()
+        src = engine.config.devices[device_index(device)]
+        names = {d.name for d in engine.config.devices}
+        name = req.name or next(n for n in (f"{device}_copy", *(f"{device}_copy{i}" for i in range(2, 10000)))
+                                if n not in names)
+        name_free(name)
+        unit = req.unit_id or next_free_unit(engine.config, engine.config.device_listeners(src))
+        if unit is None:
+            raise HTTPException(400, f"no free unit id (1..247) on listeners {engine.config.device_listeners(src)}")
+        dev = src.model_dump(mode="json", exclude_unset=True, exclude_none=True) | {"name": name, "unit_id": unit}
+        await apply_devices(device_dicts() + [dev])
+        engine.log_event("config", f"device {device} duplicated as {name} (unit {unit})")
+        return {"ok": True, "name": name, "unit_id": unit}
+
+    @app.delete("/api/devices/{device}")
+    async def device_delete(device: str):
+        i = device_index(device)
+        devices = device_dicts()
+        del devices[i]
+        await apply_devices(devices)
+        engine.log_event("config", f"device {device} deleted")
+        return {"ok": True}
+
+    @app.get("/api/devices/{device}/config", response_class=PlainTextResponse)
+    async def device_config_get(device: str):
+        d = engine.config.devices[device_index(device)]
+        text = yaml.safe_dump(d.model_dump(mode="json", exclude_unset=True, exclude_none=True),
+                              allow_unicode=True, sort_keys=False)
+        return PlainTextResponse(text, media_type="application/x-yaml")
+
+    @app.put("/api/devices/{device}/config")
+    async def device_config_put(device: str, request: Request):
+        i = device_index(device)
+        try:
+            data = yaml.safe_load((await request.body()).decode("utf-8"))
+        except yaml.YAMLError as e:
+            raise HTTPException(400, f"invalid YAML: {e}") from None
+        dev = parse_device(data)
+        name_free(dev["name"], skip=device)
+        devices = device_dicts()
+        devices[i] = dev
+        await apply_devices(devices)
+        engine.log_event("config", f"device {device} updated" + (f" (renamed to {dev['name']})"
+                                                                 if dev["name"] != device else ""))
+        return {"ok": True, "name": dev["name"]}
 
     @app.get("/api/config", response_class=PlainTextResponse)
     async def get_config():

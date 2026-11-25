@@ -172,6 +172,35 @@ Shell.addStrings("en", {
   "tpl.save.prompt": "Template name (letters, digits, _ . -)",
   "tpl.save.exists": "Template '{name}' already exists. Overwrite it?",
   "tpl.saved": "Template {name} saved to {path}",
+  "dev.add": "Add device",
+  "dev.add.title": "Add a device from a template",
+  "devdlg.title": "Add device",
+  "devdlg.template": "Template",
+  "devdlg.custom": "No template",
+  "devdlg.custom.desc": "Empty device; add points later in its YAML",
+  "devdlg.src.builtin": "built-in",
+  "devdlg.src.user": "user",
+  "devdlg.params": "Parameters",
+  "devdlg.noparams": "No parameters.",
+  "devdlg.name": "Name",
+  "devdlg.unit": "Unit ID",
+  "devdlg.listeners": "Listeners",
+  "devdlg.create": "Add",
+  "dev.added": "Device {name} added (unit {unit})",
+  "dev.dup": "Duplicate",
+  "dev.dup.title": "Copy this device with the next free unit ID",
+  "dev.duplicated": "Device {name} added as a copy (unit {unit})",
+  "dev.del": "Delete",
+  "dev.del.title": "Delete this device",
+  "dev.del.confirm": "Delete device {name}? The running simulator is reloaded; use File > Save to keep the change.",
+  "dev.deleted": "Device {name} deleted",
+  "dev.yaml": "YAML",
+  "dev.yaml.tip": "Edit this device's configuration",
+  "dev.yaml.title": "Device {name} (YAML)",
+  "dev.yaml.hint": "Only this device. Apply validates it and reloads the running simulator; File > Save writes the file.",
+  "dev.updated": "Device {name} updated",
+  "val.null": "— (null)",
+  "val.null.hint": "empty = null (not available)",
   "tab.faults": "Faults",
   "menu.view.faults": "Faults",
   "ft.dev": "Device",
@@ -265,6 +294,7 @@ const S = {
   tab: ["traffic", "stats", "log", "faults"].includes(store.get("tab", "")) ? store.get("tab") : "traffic",
   faults: [],           // fault rules (GET /api/faults, WS "faults")
   cfgApplied: null,
+  yamlDev: null,        // device whose YAML the YAML dialog edits (null = whole configuration)
 };
 
 // ------------------------------------------------------------------ api
@@ -442,8 +472,14 @@ function renderDevice() {
     ${d.description ? `<span class="meta">${esc(d.description)}</span>` : ""}
     <span class="meta">${esc(t("dev.meta", { unit: d.unit_id, tpl: d.template || t("dev.custom"), lsn: (d.listeners || []).join(", "),
       bo: d.byte_order, wo: d.word_order, ua: d.undefined_address }))}</span>
-    <button type="button" class="btn small tplsave" id="tplSave" title="${esc(t("tpl.save.title"))}">${esc(t("tpl.save"))}</button>`;
+    <button type="button" class="btn small tplsave" id="tplSave" title="${esc(t("tpl.save.title"))}">${esc(t("tpl.save"))}</button>
+    <button type="button" class="btn small" id="devDup" title="${esc(t("dev.dup.title"))}">${esc(t("dev.dup"))}</button>
+    <button type="button" class="btn small" id="devYaml" title="${esc(t("dev.yaml.tip"))}">${esc(t("dev.yaml"))}</button>
+    <button type="button" class="btn small danger" id="devDel" title="${esc(t("dev.del.title"))}">${esc(t("dev.del"))}</button>`;
   $("tplSave").onclick = () => saveAsTemplate(d.name);
+  $("devDup").onclick = () => duplicateDevice(d.name);
+  $("devYaml").onclick = () => editDeviceYaml(d.name);
+  $("devDel").onclick = () => deleteDevice(d.name);
   const f = S.filter.toLowerCase().trim();
   const showAll = !f || d.name.toLowerCase().includes(f) || String(d.unit_id) === f;
   for (const p of d.points) {
@@ -559,11 +595,14 @@ function startEdit(d, name) {
   const tr = S.rows.get(name);
   if (!p || !tr || S.editing === name) return;
   if (isBool(p) && typeof p.value !== "number") { writePoint(d, name, !p.value); return; }
+  const opts = labelOptions(p);
+  if (opts) { startSelect(d, name, p, tr, opts); return; }
   S.editing = name;
   const td = tr.querySelector(".val");
   td.innerHTML = `<input type="text" spellcheck="false">`;
   const inp = td.querySelector("input");
   inp.value = p.value == null ? "" : String(p.value);
+  if (p.nullable) inp.placeholder = t("val.null.hint");
   inp.focus(); inp.select();
   let done = false;
   const finish = () => { if (done) return; done = true; S.editing = null; updateRow(name, false); };
@@ -572,8 +611,8 @@ function startEdit(d, name) {
     if (e.key !== "Enter") return;
     e.preventDefault();
     const txt = inp.value.trim();
-    let v = txt;
-    if (p.datatype !== "string") {
+    let v = txt === "" && p.nullable ? null : txt;   // nullable (SunSpec): empty clears to "not implemented"
+    if (v !== null && p.datatype !== "string") {
       if (/^(true|false)$/i.test(txt)) v = txt.toLowerCase() === "true";
       else if (txt !== "" && !Number.isNaN(Number(txt))) v = Number(txt);
     }
@@ -582,6 +621,36 @@ function startEdit(d, name) {
   };
   inp.onblur = () => setTimeout(finish, 150);
   inp.onclick = (e) => e.stopPropagation();
+}
+
+function labelOptions(p) {
+  const l = p.labels;
+  if (!l || isBool(p)) return null;
+  const ent = Array.isArray(l) ? l.map((v, i) => [String(i), v]) : Object.entries(l);
+  return ent.length ? ent : null;
+}
+
+// enum points (labels): pick a label; nullable points also offer "—" (null)
+function startSelect(d, name, p, tr, opts) {
+  S.editing = name;
+  const td = tr.querySelector(".val");
+  const cur = p.value == null ? "" : String(p.value);
+  const extra = cur !== "" && !opts.some(([k]) => k === cur) ? `<option value="${esc(cur)}">${esc(cur)}</option>` : "";
+  td.innerHTML = `<select>${p.nullable ? `<option value="">${esc(t("val.null"))}</option>` : ""}${extra}${
+    opts.map(([k, v]) => `<option value="${esc(k)}">${esc(k)}: ${esc(v)}</option>`).join("")}</select>`;
+  const sel = td.querySelector("select");
+  sel.value = cur;
+  sel.focus();
+  let done = false;
+  const finish = () => { if (done) return; done = true; S.editing = null; updateRow(name, false); };
+  sel.onchange = async () => {
+    const k = sel.value;
+    await writePoint(d, name, k === "" ? null : Number.isNaN(Number(k)) ? k : Number(k));
+    finish();
+  };
+  sel.onkeydown = (e) => { if (e.key === "Escape") finish(); };
+  sel.onblur = () => setTimeout(finish, 150);
+  sel.onclick = (e) => e.stopPropagation();
 }
 
 // ------------------------------------------------------------------ trend
@@ -784,7 +853,7 @@ function showTab(name) {
     b.setAttribute("aria-selected", String(b.dataset.tab === name));
   });
   for (const p of ["traffic", "stats", "log", "faults"]) $(`pane-${p}`).hidden = p !== name;
-  if (name === "stats") refreshStats().then(renderStats);
+  if (name === "stats") renderStats();
 }
 
 // ------------------------------------------------------------------ simulation / config
@@ -798,6 +867,10 @@ const toggleRun = () => setSim({ running: !(S.snap?.running) });
 async function editConfig() {
   let text = "";
   try { text = await api("GET", "/api/config"); } catch (e) { toast(e.message); return; }
+  S.yamlDev = null;
+  $("yamlTitle").textContent = t("cfg.title");
+  $("yamlHint").textContent = t("cfg.hint");
+  $("yamlSave").hidden = false;
   S.cfgApplied = text;
   $("yamlText").value = text;
   $("yamlErr").textContent = "";
@@ -817,7 +890,14 @@ async function saveConfig() {
 
 $("yamlApply").onclick = async (ev) => {
   ev.preventDefault();
-  try { await applyConfig($("yamlText").value); $("dlgYaml").close(); }
+  try {
+    if (S.yamlDev) {
+      const r = await api("PUT", `/api/devices/${encodeURIComponent(S.yamlDev)}/config`, $("yamlText").value, true);
+      Shell.toast(t("dev.updated", { name: r.name }), "ok");
+      focusDevice(r.name);
+    } else await applyConfig($("yamlText").value);
+    $("dlgYaml").close();
+  }
   catch (e) { $("yamlErr").textContent = e.message; }
 };
 $("yamlSave").onclick = async () => {
@@ -893,6 +973,121 @@ async function saveAsTemplate(dev) {
   } catch (e) { toast(e.message); }
 }
 
+
+// ------------------------------------------------------------------ device management (add / duplicate / delete / YAML)
+
+const DD = { templates: [], tpl: "", unitDirty: false };
+
+function focusDevice(name) {
+  S.dev = name; store.set("device", name);
+  if (currentDevice()) selectDevice(name);   // otherwise the reload snapshot selects it when it arrives
+}
+
+function nextUnit(lids) {
+  const used = new Set((S.snap?.devices || []).filter((d) => (d.listeners || []).some((l) => lids.includes(l))).map((d) => d.unit_id));
+  for (let u = 1; u <= 247; u++) if (!used.has(u)) return u;
+  return "";
+}
+
+function ddListeners() { return [...$("ddLsn").querySelectorAll("input:checked")].map((i) => i.value); }
+
+function renderTplList() {
+  const items = [{ name: "", title: t("devdlg.custom"), description: t("devdlg.custom.desc") }, ...DD.templates];
+  $("ddTpls").innerHTML = items.map((x) => `<li data-name="${esc(x.name)}" class="${x.name === DD.tpl ? "sel" : ""}" tabindex="0">
+    ${x.source ? `<span class="src ${esc(x.source)}">${esc(t(`devdlg.src.${x.source}`))}</span>` : ""}<span class="tt">${esc(x.title)}</span>
+    ${x.name ? `<code>${esc(x.name)}</code>` : ""}${x.description ? `<small>${esc(x.description)}</small>` : ""}</li>`).join("");
+  renderTplParams();
+}
+
+function paramKind(v) {
+  return typeof v === "boolean" ? "bool" : typeof v === "number" ? "num" : v !== null && typeof v === "object" ? "json" : "text";
+}
+
+function renderTplParams() {
+  const tp = DD.templates.find((x) => x.name === DD.tpl);
+  const params = Object.entries(tp?.params || {});
+  $("ddParams").innerHTML = params.length ? params.map(([k, v]) => {
+    const kind = paramKind(v);
+    const inp = kind === "bool" ? `<input type="checkbox" ${v ? "checked" : ""}>`
+      : `<input type="${kind === "num" ? "number" : "text"}" step="any" spellcheck="false" value="${esc(kind === "json" ? JSON.stringify(v) : v ?? "")}">`;
+    return `<label data-k="${esc(k)}" data-kind="${kind}"><span>${esc(k)}</span>${inp}</label>`;
+  }).join("") : `<p class="hint">${esc(t("devdlg.noparams"))}</p>`;
+}
+
+function ddParams() {   // only values that differ from the template defaults (the YAML keeps overrides only)
+  const tp = DD.templates.find((x) => x.name === DD.tpl);
+  const out = {};
+  for (const lb of $("ddParams").querySelectorAll("label[data-k]")) {
+    const k = lb.dataset.k, inp = lb.querySelector("input"), def = tp.params[k];
+    let v;
+    if (lb.dataset.kind === "bool") v = inp.checked;
+    else if (lb.dataset.kind === "num") { if (inp.value.trim() === "") continue; v = Number(inp.value); }
+    else if (lb.dataset.kind === "json") v = JSON.parse(inp.value);
+    else { v = inp.value; if (v === "" && def == null) continue; }
+    if (JSON.stringify(v) !== JSON.stringify(def)) out[k] = v;
+  }
+  return out;
+}
+
+async function openAddDevice() {
+  try { DD.templates = await api("GET", "/api/templates"); } catch (e) { toast(e.message); return; }
+  if (!DD.templates.some((x) => x.name === DD.tpl)) DD.tpl = DD.templates[0]?.name ?? "";
+  const lsn = S.snap?.listeners || [];
+  $("ddLsn").innerHTML = lsn.map((l) => `<label><input type="checkbox" value="${esc(l.id)}" checked> ${esc(l.id)} <small class="muted">${esc(l.type)}</small></label>`).join("");
+  DD.unitDirty = false;
+  $("ddUnit").value = nextUnit(lsn.map((l) => l.id));
+  $("ddName").value = "";
+  $("ddErr").textContent = "";
+  renderTplList();
+  $("dlgDevice").showModal();
+  $("ddName").focus();
+}
+
+async function submitAddDevice(ev) {
+  ev.preventDefault();
+  const lids = ddListeners();
+  const body = { name: $("ddName").value.trim(), unit_id: Number($("ddUnit").value) };
+  try {
+    if (DD.tpl) {
+      body.template = DD.tpl;
+      const params = ddParams();
+      if (Object.keys(params).length) body.params = params;
+    }
+    if (lids.length !== (S.snap?.listeners || []).length) body.listeners = lids;   // all checked = all listeners
+    const r = await api("POST", "/api/devices", body);
+    $("dlgDevice").close();
+    Shell.toast(t("dev.added", { name: r.name, unit: r.unit_id }), "ok");
+    focusDevice(r.name);
+  } catch (e) { $("ddErr").textContent = e.message; }
+}
+
+async function duplicateDevice(name) {
+  try {
+    const r = await api("POST", `/api/devices/${encodeURIComponent(name)}/duplicate`);
+    Shell.toast(t("dev.duplicated", { name: r.name, unit: r.unit_id }), "ok");
+    focusDevice(r.name);
+  } catch (e) { toast(e.message); }
+}
+
+async function deleteDevice(name) {
+  if (!confirm(t("dev.del.confirm", { name }))) return;
+  try {
+    await api("DELETE", `/api/devices/${encodeURIComponent(name)}`);
+    Shell.toast(t("dev.deleted", { name }), "ok");
+  } catch (e) { toast(e.message); }
+}
+
+async function editDeviceYaml(name) {
+  let text = "";
+  try { text = await api("GET", `/api/devices/${encodeURIComponent(name)}/config`); } catch (e) { toast(e.message); return; }
+  S.yamlDev = name;
+  $("yamlTitle").textContent = t("dev.yaml.title", { name });
+  $("yamlHint").textContent = t("dev.yaml.hint");
+  $("yamlSave").hidden = true;
+  $("yamlText").value = text;
+  $("yamlErr").textContent = "";
+  $("dlgYaml").showModal();
+}
 
 // ------------------------------------------------------------------ fault injection (design 5.4)
 
@@ -1049,6 +1244,10 @@ function connect() {
     else if (msg.type === "faults") { S.faults = msg.rules || []; renderFaults(); }
     else if (msg.type === "simulation" && S.snap) {
       S.snap.running = msg.running; S.snap.time_scale = msg.time_scale; renderSim(S.snap);
+    } else if (msg.type === "stats") {
+      S.stats = msg.stats || {};
+      renderListeners();
+      if (S.tab === "stats") renderStats();
     } else if (msg.type === "reload") connectReload();
   };
 }
@@ -1094,6 +1293,18 @@ $("ftBody").onchange = (e) => {
 };
 window.addEventListener("resize", drawTrend);
 window.addEventListener("shell:themechange", drawTrend);
-setInterval(refreshStats, 3000);   // listener client counts / per-FC counters are not pushed over /ws
+$("devAdd").onclick = openAddDevice;
+$("ddForm").onsubmit = submitAddDevice;
+$("ddCancel").onclick = () => $("dlgDevice").close();
+$("ddTpls").onclick = (e) => {
+  const li = e.target.closest("li[data-name]");
+  if (li) { DD.tpl = li.dataset.name; renderTplList(); }
+};
+$("ddTpls").onkeydown = (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.target.closest("li[data-name]")?.click(); }
+};
+$("ddLsn").onchange = () => { if (!DD.unitDirty) $("ddUnit").value = nextUnit(ddListeners()); };
+$("ddUnit").oninput = () => { DD.unitDirty = true; };
+refreshStats();   // one initial GET; afterwards /ws pushes {"type": "stats"} every 2 s
 showTab(S.tab);
 loadTrace().then(connect);

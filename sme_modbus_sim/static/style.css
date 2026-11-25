@@ -175,3 +175,25 @@ table.traffic { width: 100%; border-collapse: collapse; font-family: var(--mono)
 .faults .ftdel { padding: 0 6px; }
 .ftempty { padding: 8px 18px; }
 .ftempty[hidden] { display: none; }
+
+/* device management (add device dialog / template browser) */
+.devadd { margin: 0 0 8px; }
+.btn.danger { color: var(--bad); }
+.ddgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; width: min(760px, 86vw); }
+@media (max-width: 640px) { .ddgrid { grid-template-columns: 1fr; } }
+.tpllist { list-style: none; margin: 4px 0 0; padding: 0; max-height: 55vh; overflow: auto; border: 1px solid var(--line); }
+.tpllist li { padding: 6px 8px; cursor: pointer; border-left: 3px solid transparent; border-bottom: 1px solid var(--line); }
+.tpllist li:hover { background: var(--surface); }
+.tpllist li.sel { background: var(--surface); border-left-color: var(--accent); }
+.tpllist .tt { font-weight: 600; }
+.tpllist code { font-size: 11px; color: var(--muted); margin-left: 6px; }
+.tpllist .src { float: right; font-size: 11px; color: var(--muted); }
+.tpllist .src.user { color: var(--accent); }
+.tpllist small { display: block; color: var(--muted); }
+.ddf { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.ddlsn { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 8px; }
+.ddparams { max-height: 30vh; overflow: auto; margin-top: 4px; }
+.ddparams label { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ddparams label span { font-family: var(--mono); font-size: 12px; }
+.ddparams input[type="text"], .ddparams input[type="number"] { width: 55%; }
+.points td.val select { max-width: 100%; }

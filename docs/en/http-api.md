@@ -46,3 +46,28 @@ curl -X POST http://127.0.0.1:8080/api/devices/PCS-1/points/p_setpoint/write \
 | `GET` | `/api/faults/export` | Rules as `faults.json` |
 
 Changes are pushed on `/ws` as `{"type": "faults", "rules": [...]}`. See [Fault injection](faults.md).
+
+## Device management
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/devices` | Add a device (JSON: `name`, `unit_id`, optional `listeners`, `template`, `params`, `points`, ...) |
+| `POST` | `/api/devices/{name}/duplicate` | Copy a device; optional JSON `{"name", "unit_id"}`, defaults `{name}_copy` and the next free unit id on the same listeners |
+| `DELETE` | `/api/devices/{name}` | Delete a device |
+| `GET` | `/api/devices/{name}/config` | That device's configuration as YAML |
+| `PUT` | `/api/devices/{name}/config` | Replace that device with the YAML body (a rename is allowed) |
+
+Every change is validated and applied with the same reload as `PUT /api/config`; the running configuration is
+re-written from the model (only the keys that were set are kept, YAML comments are lost) and
+`POST /api/config/save` writes it to the file. Errors: `404` unknown device, `409` name already used,
+`400` validation error (the message lists each pydantic error as `field: message`). See [Device management](device-management.md).
+
+## Statistics push
+
+While at least one client is connected, `/ws` pushes the per-listener counters every 2 s:
+
+```json
+{"type": "stats", "t": 1764052800.0, "stats": {"tcp1": {"type": "tcp", "requests": {"3": 120}, "exceptions": {}, "clients": 1}}}
+```
+
+`stats` has the same shape as `GET /api/stats`.

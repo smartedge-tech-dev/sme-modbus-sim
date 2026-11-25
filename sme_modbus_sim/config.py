@@ -331,9 +331,32 @@ class SimConfig(_Model):
                 raise ValueError(f"listener {l.id!r}: default_unit {l.default_unit} is not a device on it")
         from .templates import expand_device  # lazy: templates imports this module
 
+        reserved = reserved_names()
         for d in self.devices:  # template / override / address layout errors surface at load time
-            expand_device(d)
+            check_point_names(d.name, expand_device(d), reserved)
         return self
+
+
+# Names a behavior expression sees besides the device's own points (engine.step): point idents must not shadow them.
+BEHAVIOR_NAMES = ("t", "dt", "hour", "pv")
+
+
+def reserved_names() -> set:
+    from .behaviors import FUNCTIONS  # lazy: keep this module free of behavior imports at load time
+
+    return set(BEHAVIOR_NAMES) | set(FUNCTIONS)
+
+
+def check_point_names(device: str, points: List["PointConfig"], reserved: Optional[set] = None) -> None:
+    """Reject points whose expression identifier (``ident(name)``) collides with a reserved behavior name."""
+    from .behaviors import ident
+
+    reserved = reserved_names() if reserved is None else reserved
+    bad = [f"{p.name!r}" + (f" (as {ident(p.name)!r})" if ident(p.name) != p.name else "")
+           for p in points if ident(p.name) in reserved]
+    if bad:
+        raise ValueError(f"device {device!r}: point name {', '.join(bad)} is reserved in behavior expressions "
+                         f"(reserved: {', '.join(sorted(reserved))}); rename the point")
 
 
 def parse_text(text: str, fmt: Optional[str] = None) -> SimConfig:

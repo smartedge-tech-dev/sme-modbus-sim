@@ -46,3 +46,28 @@ curl -X POST http://127.0.0.1:8080/api/devices/PCS-1/points/p_setpoint/write \
 | `GET` | `/api/faults/export` | 以 `faults.json` 返回规则 |
 
 变更通过 `/ws` 推送 `{"type": "faults", "rules": [...]}`。参见 [故障注入](faults.md)。
+
+## 设备管理
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/api/devices` | 添加设备（JSON：`name`、`unit_id`，可选 `listeners`、`template`、`params`、`points` 等） |
+| `POST` | `/api/devices/{name}/duplicate` | 复制设备；可选 JSON `{"name", "unit_id"}`，默认为 `{name}_copy` 和同一监听器上下一个空闲单元 ID |
+| `DELETE` | `/api/devices/{name}` | 删除设备 |
+| `GET` | `/api/devices/{name}/config` | 该设备的配置（YAML） |
+| `PUT` | `/api/devices/{name}/config` | 用请求体中的 YAML 替换该设备（允许改名） |
+
+所有更改都会先校验，再以与 `PUT /api/config` 相同的方式重载生效；运行中的配置由模型重新生成
+（只保留显式设置的键，YAML 注释会丢失），用 `POST /api/config/save` 写回文件。
+错误：`404` 设备不存在，`409` 名称已被使用，`400` 校验错误（逐条列出 pydantic 错误，格式为 `field: message`）。
+参见 [设备管理](device-management.md)。
+
+## 统计推送
+
+只要有客户端连接，`/ws` 每 2 秒推送一次各监听器的计数：
+
+```json
+{"type": "stats", "t": 1764052800.0, "stats": {"tcp1": {"type": "tcp", "requests": {"3": 120}, "exceptions": {}, "clients": 1}}}
+```
+
+`stats` 的结构与 `GET /api/stats` 相同。

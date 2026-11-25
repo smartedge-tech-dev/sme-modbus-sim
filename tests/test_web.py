@@ -19,7 +19,7 @@ devices:
     points:
       - {name: sp, table: holding, address: 0, datatype: int16, scale: 0.1, min: -50, max: 50}
       - {name: ro, table: input, address: 0, value: 7}
-      - {name: t, table: input, address: 1, datatype: float32, behavior: {type: expr, expr: t}}
+      - {name: elapsed, table: input, address: 1, datatype: float32, behavior: {type: expr, expr: t}}
 """
 
 
@@ -185,7 +185,7 @@ def test_template_routes(client, tpl_dir):
     new = CONFIG + "  - {name: E, unit_id: 2, template: dev_d}\n"
     assert client.put("/api/config", content=new).status_code == 200
     names = [p["name"] for p in client.get("/api/state").json()["devices"][1]["points"]]
-    assert names == ["sp", "ro", "t"]
+    assert names == ["sp", "ro", "elapsed"]
 
 
 def test_cli_templates_dir(tmp_path, capsys):
@@ -199,3 +199,76 @@ def test_cli_templates_dir(tmp_path, capsys):
     cfg = tmp_path / "c.yaml"
     cfg.write_text("devices: [{name: X, unit_id: 1, template: mine}]", encoding="utf-8")
     assert main(["validate", str(cfg), "--templates-dir", str(d)]) == 0
+
+
+# ---- device management (add / duplicate / delete / per-device YAML) and the stats push
+
+
+def _names(client):
+    return [d["name"] for d in client.get("/api/state").json()["devices"]]
+
+
+def test_device_crud(client):
+    r = client.post("/api/devices", json={"name": "M", "unit_id": 5, "template": "power_meter"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "name": "M", "unit_id": 5}
+    assert _names(client) == ["D", "M"]
+    assert "template: power_meter" in client.get("/api/config").text
+    assert client.post("/api/devices", json={"name": "M", "unit_id": 6}).status_code == 409
+    r = client.post("/api/devices", json={"name": "X", "unit_id": 0})
+    assert r.status_code == 400 and "unit_id" in r.json()["detail"]
+    r = client.post("/api/devices", json={"name": "X", "unit_id": 5, "template": "power_meter"})
+    assert r.status_code == 400 and "unit_id 5" in r.json()["detail"]
+    r = client.post("/api/devices", json={"name": "X", "unit_id": 7, "points": [{"name": "pv", "table": "holding"}]})
+    assert r.status_code == 400 and "reserved" in r.json()["detail"]
+    assert client.post("/api/devices", content=b"[").status_code == 400
+    yml = client.get("/api/devices/M/config").text
+    assert yml.startswith("name: M") and "points" not in yml  # template device: overrides only
+    r = client.put("/api/devices/M/config", content=yml.replace("unit_id: 5", "unit_id: 9").replace("name: M", "name: M2"))
+    assert r.status_code == 200 and r.json()["name"] == "M2"
+    assert _names(client) == ["D", "M2"]
+    assert client.put("/api/devices/M2/config", content="name: D\nunit_id: 9\n").status_code == 409
+    assert client.put("/api/devices/M2/config", content="name: [").status_code == 400
+    assert client.put("/api/devices/M2/config", content="- a\n").status_code == 400
+    assert client.get("/api/devices/M/config").status_code == 404
+    assert client.delete("/api/devices/M2").status_code == 200
+    assert client.delete("/api/devices/M2").status_code == 404
+    assert _names(client) == ["D"]
+    assert "M2" not in client.get("/api/config").text
+
+
+def test_device_duplicate(client):
+    r = client.post("/api/devices/D/duplicate")
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "name": "D_copy", "unit_id": 2}
+    r = client.post("/api/devices/D/duplicate", json={})
+    assert r.json() == {"ok": True, "name": "D_copy2", "unit_id": 3}
+    assert client.post("/api/devices/D/duplicate", json={"name": "D_copy"}).status_code == 409
+    assert client.post("/api/devices/D/duplicate", json={"name": "Z", "unit_id": 2}).status_code == 400
+    assert client.post("/api/devices/nope/duplicate").status_code == 404
+    devs = {d["name"]: d for d in client.get("/api/state").json()["devices"]}
+    assert [p["name"] for p in devs["D_copy"]["points"]] == [p["name"] for p in devs["D"]["points"]]
+
+
+def test_next_free_unit():
+    from sme_modbus_sim.web import next_free_unit
+
+    cfg = parse_text("listeners: [{id: a, port: 1502}, {id: b, port: 1503}]\n"
+                     "devices: [{name: A, unit_id: 1, listeners: [a]}, {name: B, unit_id: 2},"
+                     " {name: C, unit_id: 3, listeners: [b]}]")
+    assert next_free_unit(cfg, ["a"]) == 3
+    assert next_free_unit(cfg, ["b"]) == 1
+    assert next_free_unit(cfg, ["a", "b"]) == 4
+    full = parse_text("devices: [" + ", ".join(f"{{name: d{u}, unit_id: {u}}}" for u in range(1, 248)) + "]")
+    assert next_free_unit(full, ["tcp1"]) is None
+
+
+def test_websocket_stats_push(client):
+    client.engine.stats_interval = 0.2
+    with client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["type"] == "snapshot"
+        for _ in range(500):
+            msg = ws.receive_json()
+            if msg["type"] == "stats":
+                break
+        assert msg["type"] == "stats" and "tcp1" in msg["stats"]
