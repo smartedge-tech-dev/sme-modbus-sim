@@ -65,6 +65,8 @@ docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
 
 マスター側: `modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6`（シリアル接続の相手側）、RTU over TCP は `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1`。
 
+1 台の Windows PC で試す場合: Windows には仮想 COM ポートのペアが標準で用意されていません。署名済みの仮想シリアルポートドライバー（市販品があります）を使うか、USB-RS485 アダプター 2 本を相互に配線（A-A、B-B）してください。com0com 3.0 の 64 ビットドライバーは正式署名されておらず、セキュアブート有効時には読み込まれません。ドライバーなしで RTU フレームを試すなら `rtu_over_tcp` リスナーを使えます。Linux では `socat -d -d pty,raw,echo=0 pty,raw,echo=0` で接続済みの pty ペアを作れます。
+
 ### ソースから実行 / pip
 
 ```bash
@@ -112,10 +114,9 @@ client.close()
 以下はすべて 0.1.0（未リリース）に含まれます: Modbus TCP、RTU over TCP、シリアル RTU、ファンクションコード
 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E、障害注入（UI・REST・プリセット）、Excel ポイント一覧の
 入出力、ユーザーローカルテンプレートと「デバイスをテンプレートとして保存」、汎用テンプレートと SunSpec PV インバーター /
-電力量計テンプレート、デバイス管理とテンプレートブラウザー付き Web UI、Windows exe、マルチアーキテクチャ Docker、オフラインアーカイブ。
+電力量計 / DER（701-705）/ 蓄電池（802, 803）テンプレート、実機の読み取り専用スキャン / 記録、デバイス管理とテンプレートブラウザー付き Web UI、Windows exe、マルチアーキテクチャ Docker、オフラインアーカイブ。
 
-今後の候補: Modbus ASCII、UDP、シリアル診断ファンクションコード（07 / 08 / 0B / 0C / 11）、Modbus/TCP Security（TLS）、
-SunSpec DER・蓄電池モデル、実機のスキャン / 記録によるポイント一覧作成。
+今後の候補: Modbus ASCII、UDP、シリアル診断ファンクションコード（07 / 08 / 0B / 0C / 11）、Modbus/TCP Security（TLS）。
 
 > SunSpec Alliance とは提携・推奨・認証の関係にありません。`sunspec_pv_inverter`（モデル 1, 103, 120-123, 160）、`sunspec_meter`（モデル 1, 203）、`sunspec_der`（モデル 1, 701-705）、`sunspec_battery`（モデル 1, 802, 803）テンプレートは、公開されている SunSpec モデル定義（Apache-2.0）から生成した、SunSpec Modbus モデルを実装するものです。特定メーカーのレジスタマップは内蔵していません。お手元のマップは Excel またはユーザーローカルテンプレートで非公開のまま取り込めます。
 

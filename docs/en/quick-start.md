@@ -37,6 +37,8 @@ docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
 
 Masters: `modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6` (the other end of the serial link) and `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1` (RTU over TCP).
 
+One Windows PC: Windows has no built-in virtual COM port pair. Use a signed virtual serial port driver (commercial products exist) or two USB-RS485 adapters wired to each other (A-A, B-B); com0com 3.0's 64-bit driver is not production-signed and does not load with Secure Boot on. To test RTU framing without any driver, use an `rtu_over_tcp` listener. On Linux, `socat -d -d pty,raw,echo=0 pty,raw,echo=0` creates a connected pty pair.
+
 ## From source
 
 ```bash

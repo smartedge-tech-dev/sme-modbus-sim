@@ -14,8 +14,8 @@
 SME ModbusSim 免费且采用 MIT 许可，由 [smart-edge（智届科技）](https://smartedge-tech.com) 开发，也可承接定制开发，
 详见[商务支持与定制开发](commercial-support.md)。
 
-同时提供：[故障注入](faults.md)、[Excel 点表](excel.md)、用户本地模板与 SunSpec 光伏逆变器 / 电能表模板
-（[模板](behaviors-templates.md)），以及 UI 中的[设备管理](device-management.md)。
+同时提供：[故障注入](faults.md)、[Excel 点表](excel.md)、用户本地模板与 SunSpec 光伏逆变器 / 电能表 / DER / 电池模板
+（[模板](behaviors-templates.md)），UI 中的[设备管理](device-management.md)，以及真实设备的只读扫描 / 录制（[快速入门](quick-start.md)）。
 与 SunSpec Alliance 无任何关联，未获其认可或认证；SunSpec 模板由公开的 SunSpec 模型定义（Apache-2.0）生成。
 
-后续候选：Modbus ASCII、UDP、串口诊断功能码、Modbus/TCP Security（TLS）、SunSpec DER 与电池模型、扫描 / 录制真实设备。
+后续候选：Modbus ASCII、UDP、串口诊断功能码、Modbus/TCP Security（TLS）。

@@ -62,6 +62,8 @@ docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
 
 Masters: `modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6` (the other end of the serial link) and `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1` (RTU over TCP).
 
+One Windows PC: Windows has no built-in virtual COM port pair. Use a signed virtual serial port driver (commercial products exist) or two USB-RS485 adapters wired to each other (A-A, B-B); com0com 3.0's 64-bit driver is not production-signed and does not load with Secure Boot on. To test RTU framing without any driver, use an `rtu_over_tcp` listener. On Linux, `socat -d -d pty,raw,echo=0 pty,raw,echo=0` creates a connected pty pair.
+
 ### From source / pip
 
 ```bash
@@ -107,12 +109,11 @@ client.close()
 
 Everything below is in 0.1.0 (not yet released): Modbus TCP, RTU over TCP and serial RTU; function codes
 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E; fault injection (UI, REST, presets); Excel point-list
-import / export; user-local templates and "save device as template"; generic and SunSpec PV inverter / meter
-templates; web UI with device management and a template browser; Windows exe, multi-arch Docker, offline archives.
+import / export; user-local templates and "save device as template"; generic templates and SunSpec PV inverter /
+meter / DER (701-705) / battery (802, 803) templates; read-only scan / record of real devices; web UI with device management and a template browser; Windows exe, multi-arch Docker, offline archives.
 
 Possible future work: Modbus ASCII, UDP, the serial diagnostic function codes (07 / 08 / 0B / 0C / 11),
-Modbus/TCP Security (TLS), SunSpec DER and battery models, and scanning / recording real devices to build a
-point list.
+and Modbus/TCP Security (TLS).
 
 > Not affiliated with, endorsed by, or certified by SunSpec Alliance. The `sunspec_pv_inverter` (models 1, 103, 120-123, 160) and `sunspec_meter` (models 1, 203), `sunspec_der` (models 1, 701-705) and `sunspec_battery` (models 1, 802, 803) templates are generated from the public SunSpec model definitions (Apache-2.0) and implement SunSpec Modbus models. No vendor register maps are built in; import your own privately via Excel or user-local templates.
 

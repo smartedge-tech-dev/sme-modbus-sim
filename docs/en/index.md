@@ -16,9 +16,8 @@ SME ModbusSim is free and MIT-licensed, developed by [smart-edge (智届科技)]
 custom development is available, see [Commercial support & custom development](commercial-support.md).
 
 Also included: [fault injection](faults.md), [Excel point lists](excel.md), user-local templates and SunSpec PV inverter /
-meter templates ([templates](behaviors-templates.md)), and [device management](device-management.md) in the UI.
+meter / DER / battery templates ([templates](behaviors-templates.md)), and [device management](device-management.md) in the UI, and read-only scan / record of real devices ([quick start](quick-start.md)).
 Not affiliated with, endorsed by, or certified by SunSpec Alliance; the SunSpec templates are generated from the public
 SunSpec model definitions (Apache-2.0).
 
-Possible future work: Modbus ASCII, UDP, serial diagnostic function codes, Modbus/TCP Security (TLS), SunSpec DER and
-battery models, scanning / recording real devices.
+Possible future work: Modbus ASCII, UDP, serial diagnostic function codes, Modbus/TCP Security (TLS).

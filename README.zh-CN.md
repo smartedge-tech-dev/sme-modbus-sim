@@ -51,6 +51,8 @@ docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
 
 主站示例：`modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6`（串口线另一端），RTU over TCP 用 `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1`。
 
+在一台 Windows 电脑上联调：Windows 没有自带的虚拟 COM 口对。请使用已签名的虚拟串口驱动（有商用产品），或用两个 USB-RS485 转换器互接（A-A、B-B）；com0com 3.0 的 64 位驱动未经正式签名，开启 Secure Boot 时无法加载。只想测 RTU 帧、不装驱动，可以用 `rtu_over_tcp` 监听器。Linux 下用 `socat -d -d pty,raw,echo=0 pty,raw,echo=0` 即可创建一对互通的 pty。
+
 ### 源码 / pip
 
 ```bash
@@ -95,11 +97,10 @@ client.close()
 
 以下均已包含在 0.1.0（尚未发布）中：Modbus TCP、RTU over TCP、串口 RTU；功能码
 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E；故障注入（UI、REST、预设）；Excel 点表导入导出；
-用户本地模板与“将设备另存为模板”；通用模板以及 SunSpec 光伏逆变器 / 电能表模板；带设备管理和模板浏览器的 Web UI；
+用户本地模板与“将设备另存为模板”；通用模板以及 SunSpec 光伏逆变器 / 电能表 / DER（701-705）/ 电池（802、803）模板；真实设备的只读扫描 / 录制；带设备管理和模板浏览器的 Web UI；
 Windows exe、多架构 Docker、离线包。
 
-后续候选：Modbus ASCII、UDP、串口诊断功能码（07 / 08 / 0B / 0C / 11）、Modbus/TCP Security（TLS）、
-SunSpec DER 与电池模型、扫描 / 录制真实设备以生成点表。
+后续候选：Modbus ASCII、UDP、串口诊断功能码（07 / 08 / 0B / 0C / 11）、Modbus/TCP Security（TLS）。
 
 > 与 SunSpec Alliance 无任何关联，未获其认可或认证。`sunspec_pv_inverter`（模型 1、103、120-123、160）、`sunspec_meter`（模型 1、203）、`sunspec_der`（模型 1、701-705）与 `sunspec_battery`（模型 1、802、803）模板由公开的 SunSpec 模型定义（Apache-2.0）生成，实现 SunSpec Modbus 模型。不内置任何厂商的寄存器表；自有厂商表可通过 Excel 或用户本地模板私下导入。
 

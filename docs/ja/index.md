@@ -17,9 +17,8 @@ SME ModbusSim は無料の MIT ライセンスで、[smart-edge（智届科技�
 カスタム開発も承ります。[商用サポート・カスタム開発](commercial-support.md) をご覧ください。
 
 あわせて、[障害注入](faults.md)、[Excel ポイント一覧](excel.md)、ユーザーローカルテンプレートと SunSpec PV インバーター /
-電力量計テンプレート（[テンプレート](behaviors-templates.md)）、UI の[デバイス管理](device-management.md)を備えます。
+電力量計 / DER / 蓄電池テンプレート（[テンプレート](behaviors-templates.md)）、UI の[デバイス管理](device-management.md)、実機の読み取り専用スキャン / 記録（[クイックスタート](quick-start.md)）を備えます。
 SunSpec Alliance とは提携・推奨・認証の関係にありません。SunSpec テンプレートは公開されている SunSpec モデル定義
 （Apache-2.0）から生成しています。
 
-今後の候補: Modbus ASCII、UDP、シリアル診断ファンクションコード、Modbus/TCP Security（TLS）、SunSpec DER・蓄電池モデル、
-実機のスキャン / 記録。
+今後の候補: Modbus ASCII、UDP、シリアル診断ファンクションコード、Modbus/TCP Security（TLS）。

@@ -36,6 +36,8 @@ docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
 
 主站示例：`modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6`（串口线另一端），RTU over TCP 用 `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1`。
 
+在一台 Windows 电脑上联调：Windows 没有自带的虚拟 COM 口对。请使用已签名的虚拟串口驱动（有商用产品），或用两个 USB-RS485 转换器互接（A-A、B-B）；com0com 3.0 的 64 位驱动未经正式签名，开启 Secure Boot 时无法加载。只想测 RTU 帧、不装驱动，可以用 `rtu_over_tcp` 监听器。Linux 下用 `socat -d -d pty,raw,echo=0 pty,raw,echo=0` 即可创建一对互通的 pty。
+
 ## 从源码运行
 
 ```bash

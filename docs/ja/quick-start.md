@@ -36,6 +36,8 @@ docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
 
 マスター側: `modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6`（シリアル接続の相手側）、RTU over TCP は `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1`。
 
+1 台の Windows PC で試す場合: Windows には仮想 COM ポートのペアが標準で用意されていません。署名済みの仮想シリアルポートドライバー（市販品があります）を使うか、USB-RS485 アダプター 2 本を相互に配線（A-A、B-B）してください。com0com 3.0 の 64 ビットドライバーは正式署名されておらず、セキュアブート有効時には読み込まれません。ドライバーなしで RTU フレームを試すなら `rtu_over_tcp` リスナーを使えます。Linux では `socat -d -d pty,raw,echo=0 pty,raw,echo=0` で接続済みの pty ペアを作れます。
+
 ## ソースから実行
 
 ```bash
