@@ -43,6 +43,9 @@ Order = Literal["big", "little"]
 _Model = StrictModel  # unknown keys are errors; fields can be filled by name or alias
 
 
+SERIAL_TYPES = ("rtu", "ascii")
+
+
 class SimulationConfig(_Model):
     tick_seconds: float = Field(default=1.0, gt=0.05, le=60)
     time_scale: float = Field(default=1.0, gt=0, le=3600)  # sim seconds per real second
@@ -59,33 +62,36 @@ class ListenerConfig(_Model):
     ``strict_timing`` apply only to it. Defaults follow Modbus over Serial Line V1.02: 8 data bits,
     even parity, and 2 stop bits when parity is ``N`` (``N`` + 1 stop bit is accepted as a widespread
     but non-conforming setting).
+    ``ascii`` (serial line, Modbus ASCII): same keys as ``rtu`` except ``strict_timing``; defaults
+    7 data bits, even parity; ``char_timeout`` (default 1 s) drops an unfinished frame.
     ``port: pty`` (Linux / macOS / WSL2) creates a pseudo-terminal pair instead of opening a device;
     the device under test opens the other end, reachable through the optional ``link`` symlink.
     """
 
     id: str = Field(min_length=1)
-    type: Literal["tcp", "rtu_over_tcp", "rtu"] = "tcp"
+    type: Literal["tcp", "rtu_over_tcp", "rtu", "ascii"] = "tcp"
     host: str = "0.0.0.0"
     port: Union[int, str] = 5020
     unit_id_mode: Literal["strict", "any"] = "strict"
     unknown_unit: Literal["ignore", "exception"] = "ignore"
     default_unit: Optional[int] = Field(default=None, ge=1, le=247)
     baudrate: Optional[int] = Field(default=None, ge=300, le=4_000_000)
-    bytesize: Optional[Literal[8]] = None
+    bytesize: Optional[Literal[7, 8]] = None
     parity: Optional[Literal["E", "N", "O"]] = None
     stopbits: Optional[Literal[1, 2]] = None
     strict_timing: Optional[bool] = None
     link: Optional[str] = Field(default=None, min_length=1)
+    char_timeout: Optional[float] = Field(default=None, gt=0, le=60)
 
     @field_validator("port")
     @classmethod
     def _port(cls, v: Any, info: Any) -> Any:
         kind = info.data.get("type", "tcp")
-        if isinstance(v, str) and v.strip().isdigit() and kind != "rtu":
+        if isinstance(v, str) and v.strip().isdigit() and kind not in SERIAL_TYPES:
             v = int(v)
-        if kind == "rtu":
+        if kind in SERIAL_TYPES:
             if isinstance(v, bool) or not str(v).strip():
-                raise ValueError("type rtu needs a serial device (e.g. COM5, /dev/ttyUSB0) or a pyserial URL")
+                raise ValueError(f"type {kind} needs a serial device (e.g. COM5, /dev/ttyUSB0) or a pyserial URL")
             v = str(v).strip()
             if v.lower() == PTY_PORT:
                 if not pty_supported():
@@ -99,27 +105,38 @@ class ListenerConfig(_Model):
 
     @model_validator(mode="after")
     def _check(self) -> "ListenerConfig":
-        serial_fields = ("baudrate", "bytesize", "parity", "stopbits", "strict_timing", "link")
-        if self.type == "rtu":
+        serial_fields = ("baudrate", "bytesize", "parity", "stopbits", "strict_timing", "link", "char_timeout")
+        if self.type in SERIAL_TYPES:
             if "port" not in self.model_fields_set:
-                raise ValueError(f"listener {self.id!r}: type rtu needs port: a serial device "
+                raise ValueError(f"listener {self.id!r}: type {self.type} needs port: a serial device "
                                  "(e.g. COM5, /dev/ttyUSB0) or a pyserial URL")
             if self.baudrate is None:
                 self.baudrate = 19200  # Serial Line V1.02: 19200 is the default
+            ascii_ = self.type == "ascii"
             if self.bytesize is None:
-                self.bytesize = 8
+                self.bytesize = 7 if ascii_ else 8
+            if not ascii_ and self.bytesize != 8:
+                raise ValueError(f"listener {self.id!r}: type rtu needs bytesize 8 (Serial Line V1.02)")
             if self.parity is None:
                 self.parity = "E"
             if self.stopbits is None:
                 self.stopbits = 2 if self.parity == "N" else 1
-            if self.strict_timing is None:
-                self.strict_timing = False
+            if ascii_:
+                if self.strict_timing is not None:
+                    raise ValueError(f"listener {self.id!r}: strict_timing only applies to type rtu")
+                if self.char_timeout is None:
+                    self.char_timeout = 1.0  # Serial Line V1.02 section 2.5.2.1
+            else:
+                if self.char_timeout is not None:
+                    raise ValueError(f"listener {self.id!r}: char_timeout only applies to type ascii")
+                if self.strict_timing is None:
+                    self.strict_timing = False
             if self.link is not None and self.port != PTY_PORT:
                 raise ValueError(f"listener {self.id!r}: link only applies to port: pty")
             return self
         used = [f for f in serial_fields if getattr(self, f) is not None]
         if used:
-            raise ValueError(f"listener {self.id!r}: {', '.join(used)} only apply to type rtu (serial)")
+            raise ValueError(f"listener {self.id!r}: {', '.join(used)} only apply to serial listeners (type rtu / ascii)")
         return self
 
 
@@ -323,11 +340,11 @@ class SimConfig(_Model):
         dup = sorted({i for i in ids if ids.count(i) > 1})
         if dup:
             raise ValueError(f"duplicate listener id: {dup}")
-        eps = [(l.host, l.port) for l in self.listeners if l.type != "rtu"]
+        eps = [(l.host, l.port) for l in self.listeners if l.type not in SERIAL_TYPES]
         dup_ep = sorted({f"{h}:{p}" for h, p in eps if eps.count((h, p)) > 1})
         if dup_ep:
             raise ValueError(f"listeners share the same host:port: {dup_ep}")
-        ports = [str(l.port) for l in self.listeners if l.type == "rtu" and l.port != PTY_PORT]
+        ports = [str(l.port) for l in self.listeners if l.type in SERIAL_TYPES and l.port != PTY_PORT]
         dup_port = sorted({p for p in ports if ports.count(p) > 1})
         if dup_port:
             raise ValueError(f"serial listeners share the same port: {dup_port}")

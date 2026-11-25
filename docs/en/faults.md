@@ -36,7 +36,7 @@ so the Traffic panel marks faulted frames with a lightning sign.
 | `delay` | `ms`, or `min_ms` + `max_ms` (random) | Delay the response; other connections are not affected |
 | `no_response` | - | Drop the request (not executed, no answer) |
 | `disconnect` | - | TCP / RTU over TCP: close the connection after receiving the request. Serial RTU: same as `no_response` |
-| `corrupt_crc` | - | RTU / RTU over TCP / serial: invert the two CRC bytes. Not applied on Modbus TCP |
+| `corrupt_crc` | - | RTU / RTU over TCP / serial RTU: invert the two CRC bytes. Serial ASCII: invert the LRC. Not applied on Modbus TCP |
 | `truncate` | `bytes` (default 3) | Send only the first N bytes of the response frame |
 | `wrong_transaction_id` | - | Modbus TCP only: answer with transaction id + 1 |
 | `wrong_unit_id` | `unit` (default: request unit + 1) | Answer with another unit id |

@@ -19,7 +19,7 @@ user, so listen on ports of 1024 or above (5020, not 502).
 
 ## Serial RTU and RTU over TCP
 
-Serial RTU defaults to 19200 baud, 8E1 (`type: rtu`, `port: COM5` or `/dev/ttyUSB0`). RTU over TCP serves RTU frames on a TCP port, for serial gateways and masters in RTU-over-TCP mode.
+Serial RTU defaults to 19200 baud, 8E1 (`type: rtu`, `port: COM5` or `/dev/ttyUSB0`). RTU over TCP serves RTU frames on a TCP port, for serial gateways and masters in RTU-over-TCP mode. Serial ASCII (`type: ascii`) defaults to 19200 baud, 7E1, and drops an unfinished frame after 1 s without characters (`char_timeout`).
 
 ```yaml
 listeners:

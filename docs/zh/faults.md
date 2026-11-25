@@ -33,7 +33,7 @@
 | `delay` | `ms`，或 `min_ms` + `max_ms`（随机） | 延迟应答；不影响其它连接 |
 | `no_response` | - | 丢弃请求（不执行、不应答） |
 | `disconnect` | - | TCP / RTU over TCP：收到请求后断开连接。串口 RTU：等同 `no_response` |
-| `corrupt_crc` | - | RTU / RTU over TCP / 串口：两个 CRC 字节取反。Modbus TCP 不适用 |
+| `corrupt_crc` | - | RTU / RTU over TCP / 串口 RTU：两个 CRC 字节取反。串口 ASCII：LRC 取反。Modbus TCP 不适用 |
 | `truncate` | `bytes`（默认 3） | 只发送应答帧的前 N 字节 |
 | `wrong_transaction_id` | - | 仅 Modbus TCP：以 transaction id + 1 应答 |
 | `wrong_unit_id` | `unit`（默认：请求单元 + 1） | 以其它单元 ID 应答 |

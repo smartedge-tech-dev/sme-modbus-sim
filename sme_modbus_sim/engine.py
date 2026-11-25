@@ -36,7 +36,7 @@ from sme_sim_common.engine import BaseEngine
 
 from . import __version__
 from .behaviors import Behavior, ident, make_behavior
-from .config import BIT_TABLES, DeviceConfig, IdentificationConfig, PointConfig, SimConfig, dump_yaml, register_count
+from .config import BIT_TABLES, DeviceConfig, IdentificationConfig, PointConfig, SERIAL_TYPES, SimConfig, dump_yaml, register_count
 from .faults import FaultManager
 from .protocol import datatypes as dtypes
 from .protocol.constants import ExceptionCode
@@ -413,12 +413,13 @@ class Engine(BaseEngine):
             units = {d.cfg.unit_id: d.store for d in devices.values() if lc.id in d.listeners}
             host, port = self._listener_addr(lc)
             self.stats.setdefault(lc.id, ListenerStats())
-            if lc.type == "rtu":
+            if lc.type in SERIAL_TYPES:
                 servers[lc.id] = ModbusSerialServer(
                     str(port), lc.baudrate or 9600, lc.bytesize or 8, lc.parity or "E", lc.stopbits or 1,
                     resolver=units.get, unit_id_mode=lc.unit_id_mode, default_unit=lc.default_unit,
                     trace=self._on_trace, listener_id=lc.id, all_units=lambda u=units: list(u.values()),
-                    strict_timing=bool(lc.strict_timing), link=lc.link)
+                    strict_timing=bool(lc.strict_timing), link=lc.link,
+                    framer=lc.type, char_timeout=lc.char_timeout or 1.0)
                 continue
             servers[lc.id] = ModbusTcpServer(
                 host, port, framer=lc.type, resolver=units.get, unit_id_mode=lc.unit_id_mode,
@@ -513,10 +514,11 @@ class Engine(BaseEngine):
             s = self.servers.get(lc.id)
             st = self.stats.get(lc.id, ListenerStats()).as_dict()
             host, port = self._listener_addr(lc)
-            if lc.type == "rtu" and s is not None:
+            serial = lc.type in SERIAL_TYPES
+            if serial and s is not None:
                 port = s.display_port
-            out[lc.id] = {"type": lc.type, "host": None if lc.type == "rtu" else host, "port": port,
-                          "device": getattr(s, "device", None) if lc.type == "rtu" else None,
+            out[lc.id] = {"type": lc.type, "host": None if serial else host, "port": port,
+                          "device": getattr(s, "device", None) if serial else None,
                           "bound_port": s.bound_port if s else None,
                           "clients": s.client_count if s else 0,
                           "status": s.status if s else "stopped", "error": s.error if s else None, **st}

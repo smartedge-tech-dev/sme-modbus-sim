@@ -55,7 +55,7 @@ def test_rtu_serial_listener_defaults():
     ("[{id: c, type: rtu, port: COM5, parity: X}]", "parity"),
     ("[{id: c, type: rtu, port: COM5, stopbits: 3}]", "stopbits"),
     ("[{id: c, type: rtu, port: COM5, bytesize: 7}]", "bytesize"),
-    ("[{id: t, port: 502, baudrate: 9600}]", "only apply to type rtu"),
+    ("[{id: t, port: 502, baudrate: 9600}]", "only apply to serial listeners"),
     ("[{id: t, port: COM5}]", "TCP port"),
     ("[{id: t, port: 70000}]", "TCP port"),
     ("[{id: a, type: rtu, port: COM5}, {id: b, type: rtu, port: COM5}]", "same port"),

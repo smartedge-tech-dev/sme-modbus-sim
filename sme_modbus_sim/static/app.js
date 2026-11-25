@@ -188,9 +188,10 @@ function renderSim(sim) {
 
 function renderClock(h) { if (h != null) $("clock").textContent = hhmm(h); }
 
+const SERIAL_TYPES = ["rtu", "ascii"];
 // Serial listeners have no host: show the device (for a pty, the link the device under test opens).
 function lsnAddr(l) {
-  return l.type === "rtu" ? String(l.port ?? "") : `${l.host}:${l.bound_port ?? l.port}`;
+  return SERIAL_TYPES.includes(l.type) ? String(l.port ?? "") : `${l.host}:${l.bound_port ?? l.port}`;
 }
 
 function listenerRows() {
@@ -198,7 +199,7 @@ function listenerRows() {
   for (const l of S.snap?.listeners || []) {
     const st = S.stats[l.id] || {};
     out.push({ id: l.id, type: l.type, addr: lsnAddr({ ...l, ...st }),
-      up: l.type === "rtu" ? (st.status ?? l.status) === "running" : (st.bound_port ?? l.bound_port) != null,
+      up: SERIAL_TYPES.includes(l.type) ? (st.status ?? l.status) === "running" : (st.bound_port ?? l.bound_port) != null,
       clients: st.clients ?? l.clients ?? 0 });
   }
   return out;

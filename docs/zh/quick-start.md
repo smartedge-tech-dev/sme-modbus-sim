@@ -18,7 +18,7 @@ docker run --rm -p 8081:8081 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-de
 
 ## 串口 RTU 与 RTU over TCP
 
-串口 RTU 默认 19200 波特率、8E1（`type: rtu`，`port: COM5` 或 `/dev/ttyUSB0`）。RTU over TCP 在 TCP 端口上提供 RTU 帧，适用于串口网关和 RTU over TCP 模式的主站。
+串口 RTU 默认 19200 波特率、8E1（`type: rtu`，`port: COM5` 或 `/dev/ttyUSB0`）。RTU over TCP 在 TCP 端口上提供 RTU 帧，适用于串口网关和 RTU over TCP 模式的主站。串口 ASCII（`type: ascii`）默认 19200 波特率、7E1，1 s 内没有新字符就丢弃未完成的帧（`char_timeout`）。
 
 ```yaml
 listeners:

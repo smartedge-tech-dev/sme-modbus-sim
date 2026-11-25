@@ -7,7 +7,7 @@
 pymodbus など）が読み書きする様子を、値の変化とともにブラウザで確認できます。
 
 - **1 つのポートで複数デバイス。** 1 つのリスナーが複数のユニット ID を受け持ち、1 台のデバイスを複数のリスナーに
-  接続することもできます。Modbus TCP、Modbus RTU over TCP（シリアルゲートウェイ向け）、シリアル RTU（COM ポート / tty）を同時に利用できます。
+  接続することもできます。Modbus TCP、Modbus RTU over TCP（シリアルゲートウェイ向け）、シリアル RTU、シリアル ASCII（COM ポート / tty）を同時に利用できます。
 - **独自のプロトコルコア。** ファンクションコード 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E（16 進）に対応し、標準の例外
   レスポンスを返します。Modbus TCP / RTU 互換のフレーミング（MBAP、CRC-16）です。
 - **豊富なデータ型。** `bool`、`int16` / `uint16`、`int32` / `uint32`、`int64` / `uint64`、`float32` / `float64`、
@@ -47,7 +47,7 @@ docker run --rm -p 8081:8081 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-de
 
 ### シリアル RTU と RTU over TCP
 
-シリアル RTU は既定で 19200 baud、8E1 です（`type: rtu`、`port: COM5` または `/dev/ttyUSB0`）。RTU over TCP は RTU フレームを TCP ポートで提供し、シリアルゲートウェイや RTU over TCP モードのマスター向けです。
+シリアル RTU は既定で 19200 baud、8E1 です（`type: rtu`、`port: COM5` または `/dev/ttyUSB0`）。RTU over TCP は RTU フレームを TCP ポートで提供し、シリアルゲートウェイや RTU over TCP モードのマスター向けです。シリアル ASCII（`type: ascii`）は既定で 19200 baud、7E1 で、1 s 文字が届かなければ未完のフレームを破棄します（`char_timeout`）。
 
 ```yaml
 listeners:

@@ -33,13 +33,14 @@ devices:
 | キー | 内容 |
 |---|---|
 | `id` | `devices[].listeners` から参照する名前 |
-| `type` | `tcp`（Modbus TCP、MBAP）、`rtu_over_tcp`（TCP ソケット上の CRC-16 付き RTU フレーム）または `rtu`（シリアル回線） |
-| `host`, `port` | `tcp` / `rtu_over_tcp`: バインドアドレスと TCP ポート（既定 5020。1024 未満は権限が必要）。`rtu`: `port` はシリアルデバイス（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）、または `pty`（後述）。`host` は無視 |
+| `type` | `tcp`（Modbus TCP、MBAP）、`rtu_over_tcp`（TCP ソケット上の CRC-16 付き RTU フレーム）`rtu`（シリアル回線、RTU）または `ascii`（シリアル回線、Modbus ASCII） |
+| `host`, `port` | `tcp` / `rtu_over_tcp`: バインドアドレスと TCP ポート（既定 5020。1024 未満は権限が必要）。`rtu` / `ascii`: `port` はシリアルデバイス（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）、または `pty`（後述）。`host` は無視 |
 | `unit_id_mode` | `strict`: 設定済みのユニット ID のみ応答。`any`: すべてのユニット ID を `default_unit` に振り向ける |
 | `unknown_unit` | `strict` 時の動作。`ignore`（実際のバスと同様に無応答）または `exception`（ゲートウェイ例外） |
 | `default_unit` | `any` モード、および TCP のユニット ID 0 / 255 で使うユニット ID |
-| `baudrate`, `bytesize`, `parity`, `stopbits` | `rtu` のみ。既定 19200（規格の既定値）、8、`E`、1。`parity`: `E` / `O` / `N`。`N` の場合の既定ストップビットは 2（Serial Line V1.02）。`N` + `stopbits: 1` は一般的だが規格外の設定として受け付ける |
+| `baudrate`, `bytesize`, `parity`, `stopbits` | `rtu` / `ascii` のみ。既定 19200（規格の既定値）、8（`ascii` は 7）、`E`、1。`rtu` は 8 データビットのみ、`ascii` は 7 または 8。`parity`: `E` / `O` / `N`。`N` の場合の既定ストップビットは 2（Serial Line V1.02）。`N` + `stopbits: 1` は一般的だが規格外の設定として受け付ける |
 | `strict_timing` | `rtu` のみ（既定 `false`）。`true`: フレーム内で t1.5 を超える間隔があれば破棄し、t3.5 ちょうどでフレーム終端とする。`false`: t1.5 を検査せず、max(t3.5, 20 ms) の無信号でフレーム終端（USB シリアル変換器はバイトをまとめて渡すため） |
+| `char_timeout` | `ascii` のみ（既定 1 s）。この時間文字が届かなければ未完のフレームを破棄する |
 | `link` | `port: pty` のみ。pty ペアのうち被試験機側の端を指すシンボリックリンクのパス（例 `/tmp/ttyV0`） |
 
 ### シリアル RTU（`type: rtu`）
@@ -54,6 +55,17 @@ listeners:
 - シリアル回線では `unknown_unit: exception` は効かない（未知のユニットは常に無応答）。
 - ポートを開けない場合、そのリスナーは `/api/state` で `status: error` となり、他のリスナーは動作を続ける。設定の再読み込みで再試行する。
 
+### シリアル ASCII（`type: ascii`）
+
+```yaml
+listeners:
+  - {id: com2, type: ascii, port: COM6}   # 19200 baud, 7E1
+```
+
+- フレーム = `:`、アドレス・PDU・LRC の 16 進文字、CR LF（Serial Line V1.02 2.5.2 節）。小文字の 16 進も受け付け、応答は大文字。
+- `:` より前の文字は無視する。未完のフレームは、新しい `:` を受信したとき、または `char_timeout` を超える間隔があいたときに破棄する。LRC 不一致、16 進文字数が奇数、513 文字超のフレームには応答しない。
+- `port: pty` は ASCII でも使える。アドレス指定、ブロードキャスト、障害注入は RTU と同じ。`corrupt_crc` は LRC を反転する。
+
 ### 疑似端末ペア（`port: pty`）
 
 Linux、macOS、WSL2 では、ModbusSim 自身が仮想シリアルポートのペアを作成できます。ドライバも root も不要です。
@@ -67,6 +79,7 @@ listeners:
 - `link` は起動時に作成し、終了時に削除する。パスが既に存在する場合、リスナーは `status: error` となり、既存のファイルには触れない。書き込み可能なディレクトリに置くこと（`/dev` は root が必要）。
 - 被試験機はいつポートを閉じて開き直してもよい。
 - 制約: pty は RTS / CTS / DTR を伝えず、ボーレートとパリティは無視され、バイトの送出間隔も再現しない。t1.5 / t3.5 は試験できないため `strict_timing: false` のままにする。
+- 被試験機は pty を 8N1 で開くこと。Linux（WSL2 5.15 カーネルで確認）では、pty に偶数/奇数パリティや 7 データビットを設定すると `EINVAL` で失敗する。流れるバイトは同じなので、ASCII や 8E1 のマスターもシリアル設定を 8N1 にすれば動く。
 - Windows では使えない。設定検証がエラーとなり、署名済みの仮想シリアルポートドライバ、USB-RS485 変換器 2 台の相互接続、または `rtu_over_tcp` を案内する。
 
 ### ファンクションコード

@@ -184,3 +184,86 @@ class RtuFramer:
     def build(unit_id: int, pdu: bytes) -> bytes:
         body = bytes([unit_id & 0xFF]) + pdu
         return body + crc_bytes(body)
+
+
+# ------------------------------------------------------------------- ASCII
+ASCII_START = 0x3A  # ':'
+ASCII_CR = 0x0D
+ASCII_LF = 0x0A
+ASCII_MAX_FRAME = 513  # characters, ':' to LF (SER V1.02 section 2.5.2.1)
+
+
+def lrc(data: bytes) -> int:
+    """Longitudinal redundancy check over the binary bytes (address .. last data byte):
+    the two's complement of their 8-bit sum (SER V1.02 section 6.2.1)."""
+    return (-sum(data)) & 0xFF
+
+
+class AsciiFramer:
+    """Request-side Modbus ASCII framer (SER V1.02 section 2.5.2).
+
+    A frame is ``':'``, hex characters for address, PDU and LRC, then CR and the end
+    delimiter (LF by default). Characters before ``':'`` are ignored; a new ``':'`` discards
+    an unfinished frame. Lower-case hex digits are accepted. The inter-character timeout
+    (default 1 s) is enforced by the caller through ``has_partial`` / ``flush_partial``.
+    """
+
+    def __init__(self, delimiter: int = ASCII_LF) -> None:
+        self.delimiter = delimiter
+        self._buf = bytearray()
+        self._in_frame = False
+
+    @property
+    def has_partial(self) -> bool:
+        return self._in_frame
+
+    def _check(self, raw: bytes) -> Frame | DroppedFrame:
+        body = raw[1:-2]
+        if len(body) % 2:
+            return DroppedFrame(raw, "odd number of hex characters")
+        try:
+            data = bytes.fromhex(body.decode("ascii"))
+        except (UnicodeDecodeError, ValueError):
+            return DroppedFrame(raw, "invalid character in ASCII frame")
+        if len(data) < 3:  # address + function code + LRC
+            return DroppedFrame(raw, "frame too short")
+        if lrc(data[:-1]) != data[-1]:
+            return DroppedFrame(raw, "LRC mismatch")
+        return Frame(unit_id=data[0], pdu=data[1:-1], raw=raw)
+
+    def feed(self, data: bytes) -> list[Frame | DroppedFrame]:
+        out: list[Frame | DroppedFrame] = []
+        for b in data:
+            if b == ASCII_START:
+                if self._in_frame:
+                    out.append(DroppedFrame(bytes(self._buf), "new ':' before end of frame"))
+                self._buf = bytearray([b])
+                self._in_frame = True
+                continue
+            if not self._in_frame:
+                continue  # noise between frames
+            self._buf.append(b)
+            if b == self.delimiter and len(self._buf) >= 3 and self._buf[-2] == ASCII_CR:
+                out.append(self._check(bytes(self._buf)))
+                self._reset()
+            elif len(self._buf) >= ASCII_MAX_FRAME:
+                out.append(DroppedFrame(bytes(self._buf), f"frame longer than {ASCII_MAX_FRAME} characters"))
+                self._reset()
+        return out
+
+    def _reset(self) -> None:
+        self._buf = bytearray()
+        self._in_frame = False
+
+    def flush_partial(self, reason: str = "inter-character timeout") -> list[Frame | DroppedFrame]:
+        """Drop the unfinished frame (called by the server when the timeout expires)."""
+        if not self._in_frame:
+            return []
+        raw = bytes(self._buf)
+        self._reset()
+        return [DroppedFrame(raw, reason)]
+
+    @staticmethod
+    def build(unit_id: int, pdu: bytes, delimiter: int = ASCII_LF) -> bytes:
+        data = bytes([unit_id & 0xFF]) + pdu
+        return b":" + (data + bytes([lrc(data)])).hex().upper().encode("ascii") + bytes([ASCII_CR, delimiter])

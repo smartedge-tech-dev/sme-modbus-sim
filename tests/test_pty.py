@@ -43,7 +43,7 @@ def test_pty_rejected_on_windows(monkeypatch):
 
 @pytest.mark.parametrize("listener, msg", [
     ({"id": "s", "type": "rtu", "port": "COM5", "link": "/tmp/v0"}, "link only applies to port: pty"),
-    ({"id": "s", "type": "tcp", "port": 5021, "link": "/tmp/v0"}, "only apply to type rtu"),
+    ({"id": "s", "type": "tcp", "port": 5021, "link": "/tmp/v0"}, "only apply to serial listeners"),
 ])
 def test_link_needs_pty(posix, listener, msg):
     with pytest.raises(ValueError, match=msg):

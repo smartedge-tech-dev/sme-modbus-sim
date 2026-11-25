@@ -7,7 +7,7 @@ sensors — or any register map you describe in YAML — and watch the values ch
 Modbus master (your EMS, a gateway, modpoll, pymodbus…) reads and writes them.
 
 - **Many devices, one port.** One listener serves many unit IDs; a device can also be attached to several listeners.
-  Modbus TCP, Modbus RTU over TCP (for serial gateways) and serial RTU (COM port / tty) are supported side by side.
+  Modbus TCP, Modbus RTU over TCP (for serial gateways) serial RTU and serial ASCII (COM port / tty) are supported side by side.
 - **Own protocol core.** Function codes 01, 02, 03, 04, 05, 06, 0F, 10, 16, 17 and 2B/0E (hex) with standard exception responses.
   Modbus TCP / RTU compatible framing (MBAP and CRC-16).
 - **All the data types.** `bool`, `int16` / `uint16`, `int32` / `uint32`, `int64` / `uint64`, `float32` / `float64`,
@@ -44,7 +44,7 @@ To use your own config: `-v ./my.yaml:/app/configs/my.yaml ... -c configs/my.yam
 
 ### Serial RTU and RTU over TCP
 
-Serial RTU defaults to 19200 baud, 8E1 (`type: rtu`, `port: COM5` or `/dev/ttyUSB0`). RTU over TCP serves RTU frames on a TCP port, for serial gateways and masters in RTU-over-TCP mode.
+Serial RTU defaults to 19200 baud, 8E1 (`type: rtu`, `port: COM5` or `/dev/ttyUSB0`). RTU over TCP serves RTU frames on a TCP port, for serial gateways and masters in RTU-over-TCP mode. Serial ASCII (`type: ascii`) defaults to 19200 baud, 7E1, and drops an unfinished frame after 1 s without characters (`char_timeout`).
 
 ```yaml
 listeners:

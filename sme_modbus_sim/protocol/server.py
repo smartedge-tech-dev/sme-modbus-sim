@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from typing import Callable, Iterable
 
 from .constants import ExceptionCode
-from .framer import DroppedFrame, Frame, MbapFramer, RtuFramer
+from .framer import AsciiFramer, DroppedFrame, Frame, MbapFramer, RtuFramer
 from .pdu import describe_request, describe_response, exception_response, handle_pdu, is_write
 from .store import UnitStore
 
@@ -61,6 +61,10 @@ def encode_response(framer: str, transaction_id: int, unit_id: int, resp: bytes,
     if framer == "tcp":
         tid = (transaction_id + 1) & 0xFFFF if action == "wrong_transaction_id" else transaction_id
         raw = MbapFramer.build(tid, unit_id, resp)
+    elif framer == "ascii":
+        raw = AsciiFramer.build(unit_id, resp)
+        if action == "corrupt_crc":  # ASCII has an LRC instead: invert it
+            raw = raw[:-4] + b"%02X" % (int(raw[-4:-2], 16) ^ 0xFF) + raw[-2:]
     else:
         raw = RtuFramer.build(unit_id, resp)
         if action == "corrupt_crc":

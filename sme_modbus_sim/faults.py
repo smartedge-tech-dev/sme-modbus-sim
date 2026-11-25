@@ -24,7 +24,7 @@ ACTIONS = ("exception", "delay", "no_response", "disconnect", "corrupt_crc", "tr
            "wrong_transaction_id", "wrong_unit_id", "busy", "freeze", "refuse_connections")
 EXCEPTION_CODES = (0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x0A, 0x0B)
 STATE_ACTIONS = ("freeze", "refuse_connections")
-RTU_FRAMERS = ("rtu", "rtu_over_tcp")
+RTU_FRAMERS = ("rtu", "rtu_over_tcp", "ascii")  # framers with a checksum (CRC or LRC)
 PARAM_KEYS = {"exception": {"code"}, "delay": {"ms", "min_ms", "max_ms"}, "truncate": {"bytes"},
               "busy": {"seconds"}, "wrong_unit_id": {"unit"}}
 MAX_DELAY_MS = 600_000

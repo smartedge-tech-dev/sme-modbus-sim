@@ -34,7 +34,7 @@ Web UI（下部ペインの **故障注入** タブ）または REST API で管�
 | `delay` | `ms`、または `min_ms` + `max_ms`（ランダム） | 応答を遅らせる。他の接続には影響しない |
 | `no_response` | - | 要求を捨てる（実行も応答もしない） |
 | `disconnect` | - | TCP / RTU over TCP：要求受信後に接続を切断。シリアル RTU では `no_response` と同じ |
-| `corrupt_crc` | - | RTU / RTU over TCP / シリアル：CRC 2 バイトを反転。Modbus TCP には適用しない |
+| `corrupt_crc` | - | RTU / RTU over TCP / シリアル RTU：CRC 2 バイトを反転。シリアル ASCII：LRC を反転。Modbus TCP には適用しない |
 | `truncate` | `bytes`（既定 3） | 応答フレームの先頭 N バイトだけ送る |
 | `wrong_transaction_id` | - | Modbus TCP のみ：トランザクション ID + 1 で応答 |
 | `wrong_unit_id` | `unit`（既定：要求のユニット + 1） | 別のユニット ID で応答 |

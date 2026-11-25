@@ -33,13 +33,14 @@ devices:
 | 键 | 含义 |
 |---|---|
 | `id` | 供 `devices[].listeners` 引用的名称 |
-| `type` | `tcp`（Modbus TCP，MBAP）、`rtu_over_tcp`（TCP 套接字上带 CRC-16 的 RTU 帧）或 `rtu`（串口） |
-| `host`, `port` | `tcp` / `rtu_over_tcp`：绑定地址与 TCP 端口（默认 5020；1024 以下需要权限）。`rtu`：`port` 为串口设备（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）或 `pty`（见下文），`host` 被忽略 |
+| `type` | `tcp`（Modbus TCP，MBAP）、`rtu_over_tcp`（TCP 套接字上带 CRC-16 的 RTU 帧）`rtu`（串口，RTU）或 `ascii`（串口，Modbus ASCII） |
+| `host`, `port` | `tcp` / `rtu_over_tcp`：绑定地址与 TCP 端口（默认 5020；1024 以下需要权限）。`rtu` / `ascii`：`port` 为串口设备（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）或 `pty`（见下文），`host` 被忽略 |
 | `unit_id_mode` | `strict`：只响应已配置的站号。`any`：所有站号都路由到 `default_unit` |
 | `unknown_unit` | `strict` 模式下：`ignore`（与真实总线一样不响应）或 `exception`（网关异常） |
 | `default_unit` | `any` 模式以及 TCP 站号 0 / 255 使用的站号 |
-| `baudrate`, `bytesize`, `parity`, `stopbits` | 仅 `rtu`。默认 19200（规格默认值）、8、`E`、1。`parity`：`E` / `O` / `N`；`N` 时默认 2 位停止位（Serial Line V1.02）。`N` + `stopbits: 1` 作为常见但不符合规格的设置也可接受 |
+| `baudrate`, `bytesize`, `parity`, `stopbits` | 仅 `rtu` / `ascii`。默认 19200（规格默认值）、8（`ascii` 为 7）、`E`、1。`rtu` 只能 8 位数据位，`ascii` 可为 7 或 8。`parity`：`E` / `O` / `N`；`N` 时默认 2 位停止位（Serial Line V1.02）。`N` + `stopbits: 1` 作为常见但不符合规格的设置也可接受 |
 | `strict_timing` | 仅 `rtu`（默认 `false`）。`true`：帧内字符间隔超过 t1.5 即丢弃该帧，静默恰好 t3.5 即帧结束。`false`：不检查 t1.5，静默 max(t3.5, 20 ms) 视为帧结束（USB 转串口适配器会成批送出字节） |
+| `char_timeout` | 仅 `ascii`（默认 1 s）。超过这么久没有新字符，就丢弃未完成的帧 |
 | `link` | 仅 `port: pty`。指向 pty 对中被测设备那一端的符号链接路径（例如 `/tmp/ttyV0`） |
 
 ### 串口 RTU（`type: rtu`）
@@ -54,6 +55,17 @@ listeners:
 - 串口上 `unknown_unit: exception` 无效（未知站号一律不应答）。
 - 串口无法打开时，该监听器在 `/api/state` 中为 `status: error`，其他监听器照常运行；重新加载配置时会重试。
 
+### 串口 ASCII（`type: ascii`）
+
+```yaml
+listeners:
+  - {id: com2, type: ascii, port: COM6}   # 19200 baud, 7E1
+```
+
+- 帧 = `:`，地址、PDU 和 LRC 的十六进制字符，再加 CR LF（Serial Line V1.02 第 2.5.2 节）。接受小写十六进制，应答用大写。
+- `:` 之前的字符忽略；收到新的 `:`，或字符间隔超过 `char_timeout`，都会丢弃未完成的帧。LRC 不符、十六进制字符数为奇数、超过 513 个字符的帧不应答。
+- `port: pty` 同样适用于 ASCII。寻址、广播、故障注入与 RTU 相同；`corrupt_crc` 改为把 LRC 取反。
+
 ### 伪终端对（`port: pty`）
 
 在 Linux、macOS 和 WSL2 上，ModbusSim 可以自己创建虚拟串口对，不需要驱动，也不需要 root：
@@ -67,6 +79,7 @@ listeners:
 - `link` 在启动时创建，退出时删除。路径已存在时，该监听器为 `status: error`，不动已有的文件。请放在有写权限的目录（`/dev` 需要 root）。
 - 被测设备可以随时关闭并重新打开串口。
 - 局限：pty 不传 RTS / CTS / DTR，波特率和校验位设置无效，也不按波特率送出字节，因此测不了 t1.5 / t3.5，请保持 `strict_timing: false`。
+- 被测设备必须以 8N1 打开 pty：在 Linux 上（WSL2 5.15 内核实测），给 pty 设偶/奇校验或 7 位数据位会报 `EINVAL`。线路上的字节不受影响，所以 ASCII 或 8E1 的主站把串口参数改成 8N1 即可。
 - Windows 上不可用：配置校验会报错，并提示可选方案：签名的虚拟串口驱动、两个 USB-RS485 适配器互接，或 `rtu_over_tcp`。
 
 ### 功能码

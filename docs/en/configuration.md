@@ -33,13 +33,14 @@ devices:
 | Key | Meaning |
 |---|---|
 | `id` | Name used by `devices[].listeners` |
-| `type` | `tcp` (Modbus TCP, MBAP), `rtu_over_tcp` (RTU frames with CRC-16 over a TCP socket) or `rtu` (serial line) |
-| `host`, `port` | `tcp` / `rtu_over_tcp`: bind address and TCP port (default 5020; ports below 1024 need privileges). `rtu`: `port` is the serial device (`COM5`, `/dev/ttyUSB0`) or a pyserial URL (`socket://host:port`, `rfc2217://...`), or `pty` (see below); `host` is ignored |
+| `type` | `tcp` (Modbus TCP, MBAP), `rtu_over_tcp` (RTU frames with CRC-16 over a TCP socket) `rtu` (serial line, RTU) or `ascii` (serial line, Modbus ASCII) |
+| `host`, `port` | `tcp` / `rtu_over_tcp`: bind address and TCP port (default 5020; ports below 1024 need privileges). `rtu` / `ascii`: `port` is the serial device (`COM5`, `/dev/ttyUSB0`) or a pyserial URL (`socket://host:port`, `rfc2217://...`), or `pty` (see below); `host` is ignored |
 | `unit_id_mode` | `strict`: only configured unit IDs answer. `any`: every unit ID is routed to `default_unit` |
 | `unknown_unit` | In `strict` mode: `ignore` (no response, like a real bus) or `exception` (gateway exception) |
 | `default_unit` | Unit ID used by `any` mode and for TCP unit IDs 0 / 255 |
-| `baudrate`, `bytesize`, `parity`, `stopbits` | `rtu` only. Defaults 19200 (spec default), 8, `E`, 1. `parity`: `E` / `O` / `N`; with `N` the default is 2 stop bits (Serial Line V1.02). `N` + `stopbits: 1` is accepted as a common but non-conforming setting |
+| `baudrate`, `bytesize`, `parity`, `stopbits` | `rtu` / `ascii` only. Defaults 19200 (spec default), 8 (`ascii`: 7), `E`, 1. `rtu` needs 8 data bits; `ascii` accepts 7 or 8. `parity`: `E` / `O` / `N`; with `N` the default is 2 stop bits (Serial Line V1.02). `N` + `stopbits: 1` is accepted as a common but non-conforming setting |
 | `strict_timing` | `rtu` only (default `false`). `true`: a gap longer than t1.5 inside a frame drops it and exactly t3.5 ends a frame. `false`: no t1.5 check and frames end after max(t3.5, 20 ms) of silence, because USB-serial adapters deliver bytes in bursts |
+| `char_timeout` | `ascii` only (default 1 s). An unfinished frame is dropped when no character arrives for this long |
 | `link` | `port: pty` only. Path of a symlink to the device under test's end of the pty pair (e.g. `/tmp/ttyV0`) |
 
 ### Serial RTU (`type: rtu`)
@@ -54,6 +55,17 @@ listeners:
 - `unknown_unit: exception` has no effect on a serial line (unknown units never answer).
 - If the port cannot be opened, the listener reports `status: error` in `/api/state` and the other listeners keep running; a configuration reload retries.
 
+### Serial ASCII (`type: ascii`)
+
+```yaml
+listeners:
+  - {id: com2, type: ascii, port: COM6}   # 19200 baud, 7E1
+```
+
+- Frame = `:`, address, PDU and LRC as hex characters, then CR LF (Serial Line V1.02 section 2.5.2). Lower-case hex is accepted; responses use upper case.
+- Characters before `:` are ignored; a new `:` discards an unfinished frame, as does a gap longer than `char_timeout`. A bad LRC, an odd number of hex characters or a frame over 513 characters gets no response.
+- `port: pty` works for ASCII too. Addressing, broadcast and fault injection are as for RTU; `corrupt_crc` inverts the LRC.
+
 ### Pseudo-terminal pair (`port: pty`)
 
 On Linux, macOS and WSL2 ModbusSim can create the virtual serial port pair itself, with no driver and no root:
@@ -67,6 +79,7 @@ listeners:
 - `link` is created at startup and removed on exit. If the path already exists, the listener reports `status: error` and the existing file is left alone. Put it in a directory you can write to (`/dev` needs root).
 - The device under test may close and reopen the port at any time.
 - Limits: a pty carries no RTS / CTS / DTR, ignores the baud rate and parity, and does not pace bytes, so t1.5 / t3.5 cannot be tested; keep `strict_timing: false`.
+- The device under test must open the pty as 8N1: on Linux (tested on the WSL2 5.15 kernel), setting even/odd parity or 7 data bits on a pty fails with `EINVAL`. The bytes are the same either way, so an ASCII or 8E1 master still works once its serial settings are 8N1.
 - Not available on Windows: configuration validation fails and suggests a signed virtual serial port driver, a pair of USB-RS485 adapters, or `rtu_over_tcp`.
 
 ### Function codes
