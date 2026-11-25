@@ -1,18 +1,26 @@
 """Configuration model and file loading (YAML / JSON).
 
-Skeleton (``_Model``, ``SimulationConfig``, loaders) follows sme-bac-sim ``sme_bacnet_sim/config.py`` @ ebd27ec;
-listener / device / point models are Modbus specific (design §2.4, §5.1).
+The strict base model, the YAML / JSON loaders, atomic writes and YAML block write-back come from
+``sme_sim_common.config``; reserved expression names come from ``sme_sim_common.behaviors``.
+Listener / device / point models are Modbus specific (design §2.4, §5.1).
 Addresses are 0-based protocol addresses.
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Union
 
-import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
+from sme_sim_common import config as _common
+from sme_sim_common.behaviors import ENGINE_NAMES, check_point_names, reserved_names
+from sme_sim_common.config import StrictModel, atomic_write_text, dump_yaml, replace_yaml_block
+
+__all__ = [
+    "SimulationConfig", "ListenerConfig", "IdentificationConfig", "PointConfig", "DeviceConfig", "SimConfig",
+    "register_count", "check_layout", "check_point_names", "reserved_names", "parse_text", "load_file",
+    "dump_yaml", "atomic_write_text", "replace_yaml_block",
+]
 
 TABLES = ("coil", "discrete", "input", "holding")
 BIT_TABLES = ("coil", "discrete")
@@ -31,8 +39,7 @@ SCALE_REF_TYPES = ("uint16", "int16", "uint32", "int32", "uint64", "int64")
 Order = Literal["big", "little"]
 
 
-class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+_Model = StrictModel  # unknown keys are errors; fields can be filled by name or alias
 
 
 class SimulationConfig(_Model):
@@ -333,43 +340,20 @@ class SimConfig(_Model):
 
         reserved = reserved_names()
         for d in self.devices:  # template / override / address layout errors surface at load time
-            check_point_names(d.name, expand_device(d), reserved)
+            check_point_names(d.name, [p.name for p in expand_device(d)], reserved)
         return self
 
 
 # Names a behavior expression sees besides the device's own points (engine.step): point idents must not shadow them.
-BEHAVIOR_NAMES = ("t", "dt", "hour", "pv")
-
-
-def reserved_names() -> set:
-    from .behaviors import FUNCTIONS  # lazy: keep this module free of behavior imports at load time
-
-    return set(BEHAVIOR_NAMES) | set(FUNCTIONS)
-
-
-def check_point_names(device: str, points: List["PointConfig"], reserved: Optional[set] = None) -> None:
-    """Reject points whose expression identifier (``ident(name)``) collides with a reserved behavior name."""
-    from .behaviors import ident
-
-    reserved = reserved_names() if reserved is None else reserved
-    bad = [f"{p.name!r}" + (f" (as {ident(p.name)!r})" if ident(p.name) != p.name else "")
-           for p in points if ident(p.name) in reserved]
-    if bad:
-        raise ValueError(f"device {device!r}: point name {', '.join(bad)} is reserved in behavior expressions "
-                         f"(reserved: {', '.join(sorted(reserved))}); rename the point")
+# ``reserved_names()`` = these + ``FUNCTIONS``; ``check_point_names(owner, names, reserved=None)`` (both common).
+BEHAVIOR_NAMES = ENGINE_NAMES
 
 
 def parse_text(text: str, fmt: Optional[str] = None) -> SimConfig:
     """Parse YAML or JSON text (YAML is a superset of JSON)."""
-    data = json.loads(text) if fmt == "json" else yaml.safe_load(text)
-    return SimConfig.model_validate(data or {})
+    return _common.parse_text(text, SimConfig, fmt="json" if fmt == "json" else "yaml")
 
 
 def load_file(path: Union[str, Path]) -> SimConfig:
-    p = Path(path)
-    return parse_text(p.read_text(encoding="utf-8"), "json" if p.suffix.lower() == ".json" else None)
-
-
-def dump_yaml(cfg: Union[SimConfig, BaseModel, dict]) -> str:
-    data = cfg.model_dump(exclude_none=True, exclude_defaults=False) if isinstance(cfg, BaseModel) else cfg
-    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+    """Load a ``.json`` file as JSON and anything else as YAML."""
+    return _common.load_file(path, SimConfig)

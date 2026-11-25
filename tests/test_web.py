@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from sme_sim_common import __version__ as common_version
+
 from sme_modbus_sim import __version__
 from sme_modbus_sim.__main__ import main
 from sme_modbus_sim.config import parse_text
@@ -36,7 +38,8 @@ def client(tmp_path):
 
 
 def test_read_routes(client):
-    assert client.get("/api/version").json() == {"name": "SME ModbusSim", "version": __version__}
+    assert client.get("/api/version").json() == {"name": "SME ModbusSim", "version": __version__,
+                                              "common_version": common_version}
     st = client.get("/api/state").json()
     assert st["devices"][0]["name"] == "D" and st["listeners"][0]["bound_port"] > 0
     assert {t["name"] for t in client.get("/api/templates").json()} >= {"battery_pcs", "custom"}
@@ -101,7 +104,7 @@ def test_cli_validate_and_templates(tmp_path, capsys):
     assert main(["validate", str(demo)]) == 0
     bad = tmp_path / "bad.yaml"
     bad.write_text("devices: [{name: X, unit_id: 0}]", encoding="utf-8")
-    assert main(["validate", str(bad)]) == 1
+    assert main(["validate", str(bad)]) == 2  # config error
     assert main(["templates"]) == 0
     assert "battery_pcs" in capsys.readouterr().out
     with pytest.raises(SystemExit) as ei:
@@ -116,7 +119,7 @@ import io  # noqa: E402
 from openpyxl import load_workbook  # noqa: E402
 
 from sme_modbus_sim import templates as tpl  # noqa: E402
-from sme_modbus_sim.web import XLSX_TYPE  # noqa: E402
+from sme_sim_common.web import XLSX_TYPE  # noqa: E402
 from sme_modbus_sim.xlsx import SHEETS  # noqa: E402
 
 
@@ -124,7 +127,7 @@ from sme_modbus_sim.xlsx import SHEETS  # noqa: E402
 def tpl_dir(tmp_path, monkeypatch):
     d = tmp_path / "user-templates"
     monkeypatch.setenv(tpl.ENV_TEMPLATES_DIR, str(d))
-    monkeypatch.setattr(tpl, "_user_dir", None)
+    monkeypatch.setattr(tpl.registry, "_user_dir", None)
     yield d
     tpl.clear_user_templates()
 
@@ -154,7 +157,7 @@ def test_xlsx_routes(client):
     _set(wb, "Points", "name", "ro", "value", 9)
     r2 = client.post("/api/config/import", files={"file": ("p.xlsx", _bytes(wb), XLSX_TYPE)})
     assert r2.status_code == 200, r2.text
-    assert r2.json()["devices"] == 1
+    assert r2.json()["ok"] is True and len(client.get("/api/state").json()["devices"]) == 1
     cfg = parse_text(client.get("/api/config").text)
     assert {p.name: p.value for p in cfg.devices[0].points}["ro"] == 9
     assert cfg.simulation.tick_seconds == 0.1  # simulation section kept from the running config
@@ -211,7 +214,7 @@ def _names(client):
 def test_device_crud(client):
     r = client.post("/api/devices", json={"name": "M", "unit_id": 5, "template": "power_meter"})
     assert r.status_code == 200, r.text
-    assert r.json() == {"ok": True, "name": "M", "unit_id": 5}
+    assert r.json() == {"ok": True, "name": "M", "device": {"name": "M", "unit_id": 5, "template": "power_meter"}}
     assert _names(client) == ["D", "M"]
     assert "template: power_meter" in client.get("/api/config").text
     assert client.post("/api/devices", json={"name": "M", "unit_id": 6}).status_code == 409
@@ -240,9 +243,9 @@ def test_device_crud(client):
 def test_device_duplicate(client):
     r = client.post("/api/devices/D/duplicate")
     assert r.status_code == 200, r.text
-    assert r.json() == {"ok": True, "name": "D_copy", "unit_id": 2}
+    assert r.json()["name"] == "D_copy" and r.json()["device"]["unit_id"] == 2
     r = client.post("/api/devices/D/duplicate", json={})
-    assert r.json() == {"ok": True, "name": "D_copy2", "unit_id": 3}
+    assert r.json()["name"] == "D_copy2" and r.json()["device"]["unit_id"] == 3
     assert client.post("/api/devices/D/duplicate", json={"name": "D_copy"}).status_code == 409
     assert client.post("/api/devices/D/duplicate", json={"name": "Z", "unit_id": 2}).status_code == 400
     assert client.post("/api/devices/nope/duplicate").status_code == 404

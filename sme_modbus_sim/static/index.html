@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SME ModbusSim</title>
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-  <link rel="stylesheet" href="/static/shell/shell.css">
+  <link rel="stylesheet" href="/sme-sim-common/shell/shell.css?v=__SME_SIM_COMMON_VERSION__">
   <link rel="stylesheet" href="/static/style.css">
   <!-- Loaded in <head> so the stored theme applies before first paint. -->
-  <script src="/static/shell/shell.js" data-storage="sme-modbus-sim"></script>
+  <script src="/sme-sim-common/shell/shell.js?v=__SME_SIM_COMMON_VERSION__"
+          data-storage="sme-modbus-sim" data-common-version="__SME_SIM_COMMON_VERSION__"></script>
 </head>
 <body class="sh-tool">
 <!-- Shell.init() inserts the header before .sh-body and the footer after it. -->
@@ -29,15 +30,15 @@
       <div class="tablewrap">
         <table class="points">
           <thead><tr>
-            <th data-i18n="col.name">Name</th>
+            <th data-i18n="common.col.name">Name</th>
             <th data-i18n="col.table">Table</th>
             <th class="num"><button type="button" class="addrmode" id="addrMode" data-i18n-title="col.address.title"></button></th>
             <th data-i18n="col.datatype">Type</th>
             <th data-i18n="col.order" data-i18n-title="col.order.title">Order</th>
-            <th class="num" data-i18n="col.value">Value</th>
+            <th class="num" data-i18n="common.col.value">Value</th>
             <th data-i18n="col.raw" data-i18n-title="col.raw.title">Raw</th>
             <th data-i18n="col.access">Access</th>
-            <th data-i18n="col.behavior">Behavior</th>
+            <th data-i18n="common.col.behavior">Behavior</th>
           </tr></thead>
           <tbody id="points"></tbody>
         </table>
@@ -54,7 +55,7 @@
     <div class="tabs" role="tablist">
       <button type="button" class="tab sel" data-tab="traffic" role="tab"><span data-i18n="tab.traffic">Traffic</span> <span id="trCount" class="cnt"></span></button>
       <button type="button" class="tab" data-tab="stats" role="tab" data-i18n="tab.stats">Statistics</button>
-      <button type="button" class="tab" data-tab="log" role="tab"><span data-i18n="tab.log">Event log</span> <span id="logCount" class="cnt"></span></button>
+      <button type="button" class="tab" data-tab="log" role="tab"><span data-i18n="common.event_log.title">Event log</span> <span id="logCount" class="cnt"></span></button>
       <button type="button" class="tab" data-tab="faults" role="tab"><span data-i18n="tab.faults">Faults</span> <span id="ftCount" class="cnt"></span></button>
       <span class="spacer"></span>
       <button type="button" class="btn small" id="bottomToggle" data-i18n-title="tab.collapse" data-i18n-aria-label="tab.collapse">▾</button>
@@ -114,7 +115,7 @@
         <label><span data-i18n="ft.f.every">Every N</span> <input id="ftEvery" type="number" min="1"></label>
         <label data-i18n-title="ft.f.remaining.title"><span data-i18n="ft.f.remaining">Count</span> <input id="ftRemain" type="number" min="1"></label>
         <button type="submit" class="btn small primary" data-i18n="ft.f.add">Add</button>
-        <button type="button" class="btn small" id="ftCancel" data-i18n="dlg.cancel">Cancel</button>
+        <button type="button" class="btn small" id="ftCancel" data-i18n="common.dlg.cancel">Cancel</button>
       </form>
       <div class="trwrap">
         <table class="traffic faults">
@@ -138,9 +139,9 @@
     <p class="hint" id="yamlHint" data-i18n="cfg.hint">Apply reloads the running simulator; Save writes the applied configuration back to the config file.</p>
     <div class="err" id="yamlErr"></div>
     <div class="dlgbtns">
-      <button class="btn" value="cancel" data-i18n="dlg.cancel">Cancel</button>
+      <button class="btn" value="cancel" data-i18n="common.dlg.cancel">Cancel</button>
       <button class="btn" type="button" id="yamlSave" data-i18n="cfg.save">Save to file</button>
-      <button class="btn primary" id="yamlApply" value="default" data-i18n="dlg.apply">Apply</button>
+      <button class="btn primary" id="yamlApply" value="default" data-i18n="common.dlg.apply">Apply</button>
     </div>
   </form>
 </dialog>
@@ -164,7 +165,7 @@
     </div>
     <div class="err" id="ddErr"></div>
     <div class="dlgbtns">
-      <button class="btn" type="button" id="ddCancel" data-i18n="dlg.cancel">Cancel</button>
+      <button class="btn" type="button" id="ddCancel" data-i18n="common.dlg.cancel">Cancel</button>
       <button class="btn primary" type="submit" data-i18n="devdlg.create">Add</button>
     </div>
   </form>
@@ -176,12 +177,15 @@
     <p class="hint" id="errHint"></p>
     <ul class="errlist err" id="errList"></ul>
     <div class="dlgbtns">
-      <button class="btn primary" value="close" data-i18n="errdlg.close">Close</button>
+      <button class="btn primary" value="close" data-i18n="common.dlg.close">Close</button>
     </div>
   </form>
 </dialog>
 <input type="file" id="xlsxFile" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
 
+<script src="/sme-sim-common/vendor/vendor.js?v=__SME_SIM_COMMON_VERSION__"></script>
+<script src="/sme-sim-common/i18n/common.js?v=__SME_SIM_COMMON_VERSION__"></script>
+<script src="/static/i18n/en.js"></script>
 <script src="/static/i18n/ja.js"></script>
 <script src="/static/i18n/zh.js"></script>
 <script src="/static/app.js"></script>

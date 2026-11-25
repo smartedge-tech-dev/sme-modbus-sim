@@ -1,7 +1,8 @@
 """Built-in device templates.
 
-Mechanism (``@template``, params merge, override by name, ``removed``, ``template_catalog``) follows
-sme-bac-sim ``sme_bacnet_sim/templates.py`` @ ebd27ec; instance auto-assignment became address auto-allocation.
+The mechanism (``@template``, params merge, override by name, ``removed``, catalog, user-local templates) is
+``sme_sim_common.templates.TemplateRegistry``; this module plugs in the Modbus hooks (address auto-allocation,
+"needs a table" + layout check, byte / word order export) and keeps the module-level API.
 
 The register maps below are ORIGINAL, vendor-neutral layouts invented for this simulator. They do not
 reproduce any manufacturer's communication specification (design §5.3, §12 Q6/Q12).
@@ -16,26 +17,68 @@ overrides the built-in template of the same name (see ``load_user_templates``).
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-import yaml
-from pydantic import ValidationError
+from sme_sim_common.templates import NAME_RE, TemplateRegistry, env_var_for, escape_braces, substitute  # noqa: F401
 
 from .config import DeviceConfig, PointConfig, check_layout, register_count
 
 Pt = Dict[str, Any]
-TEMPLATES: Dict[str, Dict[str, Any]] = {}
+APP_NAME = "sme-modbus-sim"
 
 
-def template(name: str, title: str, params: Dict[str, Any]):
-    def deco(fn: Callable[[Dict[str, Any]], List[Pt]]):
-        TEMPLATES[name] = {"name": name, "title": title, "params": params, "build": fn}
-        return fn
+def allocate_addresses(points: List[PointConfig]) -> List[PointConfig]:
+    """Give points without an address the next free address of their table.
 
-    return deco
+    Allocation starts after the highest explicit address range of the table (0 when there is none) and
+    advances by each point's register count, in point order.
+    """
+    nxt: Dict[Any, int] = {}
+    for p in points:
+        if p.address is not None:
+            nxt[p.table] = max(nxt.get(p.table, 0), p.address + register_count(p))
+    out = []
+    for p in points:
+        if p.address is None:
+            a = nxt.get(p.table, 0)
+            p = p.model_copy(update={"address": a})
+            nxt[p.table] = a + register_count(p)
+        out.append(p)
+    return out
+
+
+def _finalize(owner: str, points: List[PointConfig]) -> List[PointConfig]:
+    return allocate_addresses(points)
+
+
+def _validate(owner: str, points: List[PointConfig]) -> None:
+    """Every merged point needs a table (an override without one must match a template point), then the
+    address layout / scale_ref check."""
+    for p in points:
+        if p.table is None:
+            raise ValueError(f"{owner}/{p.name}: needs a table (no template point of that name)")
+    check_layout(owner, points)
+
+
+def _export(dev: DeviceConfig, d: Pt) -> Pt:
+    """``device_as_template``: copy a non-default device byte / word order onto points that do not set their
+    own; enum label keys back to int (``mode="json"`` dumps them as text)."""
+    for k in ("byte_order", "word_order"):
+        if getattr(dev, k) != "big" and k not in d:
+            d[k] = getattr(dev, k)
+    if "labels" in d:
+        d["labels"] = {int(k): v for k, v in d["labels"].items()}
+    return d
+
+
+registry: TemplateRegistry[PointConfig] = TemplateRegistry(
+    PointConfig, _validate, app_name=APP_NAME, finalize_hook=_finalize, export_hook=_export)
+template = registry.template  # decorator: @template(name, title, params, description=None)
+TEMPLATES: Dict[str, Dict[str, Any]] = registry.builtins  # same dict objects as the registry's (live views)
+USER_TEMPLATES: Dict[str, Dict[str, Any]] = registry.user_templates
+USER_TEMPLATE_ERRORS: List[Dict[str, str]] = registry.user_errors
+ENV_TEMPLATES_DIR = registry.env_var  # SME_MODBUS_SIM_TEMPLATES
 
 
 def _ref(device: Any, point: str, fallback: str) -> str:
@@ -372,221 +415,48 @@ for _name in ("sunspec_pv_inverter", "sunspec_meter"):
     TEMPLATES[_name]["description"] = SUNSPEC_NOTE
 
 
-def allocate_addresses(points: List[PointConfig]) -> List[PointConfig]:
-    """Give points without an address the next free address of their table.
-
-    Allocation starts after the highest explicit address range of the table (0 when there is none) and
-    advances by each point's register count, in point order.
-    """
-    nxt: Dict[str, int] = {}
-    for p in points:
-        if p.address is not None:
-            nxt[p.table] = max(nxt.get(p.table, 0), p.address + register_count(p))
-    out = []
-    for p in points:
-        if p.address is None:
-            a = nxt.get(p.table, 0)
-            p = p.model_copy(update={"address": a})
-            nxt[p.table] = a + register_count(p)
-        out.append(p)
-    return out
+# ---------------------------------------------------------------- module-level API (delegates to ``registry``)
+#
+# User-local templates (design §5.3.1): ``<dir>/*.yaml`` / ``*.yml`` with name / title / description / params /
+# points; format and ``{param}`` substitution as documented in ``sme_sim_common.templates``.
 
 
 def get_template(name: str) -> Optional[Dict[str, Any]]:
     """User template first (it overrides a built-in of the same name), then built-in."""
-    return USER_TEMPLATES.get(name) or TEMPLATES.get(name)
+    return registry.get(name)
 
 
 def expand_device(dev: DeviceConfig) -> List[PointConfig]:
     """Template points merged with the device's own points (same name overrides), addresses allocated."""
-    pts: List[Pt] = []
-    if dev.template:
-        t = get_template(dev.template)
-        if t is None:
-            known = ", ".join(dict.fromkeys([*TEMPLATES, *USER_TEMPLATES]))
-            raise ValueError(f"{dev.name}: unknown template {dev.template!r} (known: {known})")
-        params = {**t["params"], **dev.params}
-        pts = t["build"](params)
-    result: Dict[str, PointConfig] = {p["name"]: PointConfig.model_validate(p) for p in pts}
-    for p in dev.points:
-        if p.name in result:
-            merged = {**result[p.name].model_dump(exclude_none=True), **p.model_dump(exclude_unset=True)}
-            try:
-                result[p.name] = PointConfig.model_validate(merged)
-            except ValueError as e:
-                raise ValueError(f"{dev.name}/{p.name}: {e}") from None
-        elif p.table is None:
-            raise ValueError(f"{dev.name}/{p.name}: needs a table (no template point of that name)")
-        else:
-            result[p.name] = p
-    for name in dev.removed or []:
-        result.pop(name, None)
-    final = allocate_addresses(list(result.values()))
-    check_layout(dev.name, final)
-    return final
+    return registry.expand_device(dev)
 
 
 def template_catalog() -> List[Dict[str, Any]]:
     """Built-ins (replaced in place by a user template of the same name), then user-only templates."""
-    out = []
-    for name in dict.fromkeys([*TEMPLATES, *USER_TEMPLATES]):
-        t = get_template(name)
-        e = {"name": name, "title": t["title"], "params": t["params"], "source": t.get("source", "builtin")}
-        if t.get("description"):
-            e["description"] = t["description"]
-        if "path" in t:
-            e["path"] = t["path"]
-            e["overrides_builtin"] = name in TEMPLATES
-        out.append(e)
-    return out
-
-
-# ---------------------------------------------------------------- user-local templates (design §5.3.1)
-#
-# A user template file (``<dir>/*.yaml`` / ``*.yml``) is a mapping:
-#
-#   name: my_inverter            # default: the file name without extension
-#   title: My inverter           # default: name
-#   description: free text
-#   params: {rated_kw: 10}       # defaults, overridable per device with ``params:``
-#   points: [...]                # same schema as a device's ``points:``
-#
-# Parameter substitution happens only inside string values: ``str.format`` with the merged params
-# (``"clamp(p, 0, {rated_kw})"``). A string that is exactly one placeholder (``max: "{rated_kw}"``) takes the
-# parameter value with its type. Literal braces are written ``{{`` / ``}}``.
-
-ENV_TEMPLATES_DIR = "SME_MODBUS_SIM_TEMPLATES"
-USER_TEMPLATES: Dict[str, Dict[str, Any]] = {}
-USER_TEMPLATE_ERRORS: List[Dict[str, str]] = []
-_user_dir: Optional[Path] = None
-_TEMPLATE_KEYS = {"name", "title", "description", "params", "points"}
-NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$")
-_ONE_PLACEHOLDER = re.compile(r"^\{([A-Za-z_][A-Za-z0-9_]*)\}$")
+    return registry.catalog()
 
 
 def default_templates_dir() -> Path:
-    env = os.environ.get(ENV_TEMPLATES_DIR)
-    return Path(env).expanduser() if env else Path.home() / ".sme-modbus-sim" / "templates"
+    """``$SME_MODBUS_SIM_TEMPLATES`` or ``~/.sme-modbus-sim/templates``."""
+    return registry.default_templates_dir()
 
 
 def templates_dir() -> Path:
     """The directory last loaded (or the default one)."""
-    return _user_dir or default_templates_dir()
-
-
-def substitute(v: Any, params: Dict[str, Any]) -> Any:
-    """``{param}`` substitution inside string values (recursively through lists / mappings)."""
-    if isinstance(v, str):
-        m = _ONE_PLACEHOLDER.match(v)
-        if m:
-            if m.group(1) not in params:
-                raise ValueError(f"unknown parameter {m.group(1)!r} in {v!r}")
-            return params[m.group(1)]
-        try:
-            return v.format(**params)
-        except KeyError as e:
-            raise ValueError(f"unknown parameter {e.args[0]!r} in {v!r}") from None
-        except (IndexError, ValueError) as e:
-            raise ValueError(f"bad placeholder in {v!r}: {e} (write literal braces as {{{{ and }}}})") from None
-    if isinstance(v, list):
-        return [substitute(x, params) for x in v]
-    if isinstance(v, dict):
-        return {k: substitute(x, params) for k, x in v.items()}
-    return v
-
-
-def _user_template(data: Any, path: Path) -> Dict[str, Any]:
-    if not isinstance(data, dict):
-        raise ValueError("expected a mapping with name / title / params / points")
-    unknown = sorted(set(data) - _TEMPLATE_KEYS)
-    if unknown:
-        raise ValueError(f"unknown key(s) {unknown} (allowed: {', '.join(sorted(_TEMPLATE_KEYS))})")
-    name = str(data.get("name") or path.stem)
-    if not NAME_RE.match(name):
-        raise ValueError(f"invalid template name {name!r} (letters, digits, _ . -)")
-    params = data.get("params") or {}
-    points = data.get("points") or []
-    if not isinstance(params, dict):
-        raise ValueError("params must be a mapping")
-    if not isinstance(points, list) or not all(isinstance(p, dict) for p in points):
-        raise ValueError("points must be a list of mappings")
-
-    def build(p: Dict[str, Any], _points=points) -> List[Pt]:
-        return [substitute(pt, p) for pt in _points]
-
-    try:  # check with the default params: point schema, names, layout
-        pts = [PointConfig.model_validate(p) for p in build(dict(params))]
-    except ValidationError as e:
-        raise ValueError("; ".join(f"points.{'.'.join(map(str, err['loc']))}: "
-                                   f"{str(err['msg']).removeprefix('Value error, ')}" for err in e.errors())) from None
-    missing = [p.name for p in pts if p.table is None]
-    if missing:
-        raise ValueError(f"points {missing} need a table")
-    names = [p.name for p in pts]
-    dup = sorted({n for n in names if names.count(n) > 1})
-    if dup:
-        raise ValueError(f"duplicate point names {dup}")
-    check_layout(name, allocate_addresses(pts))
-    return {"name": name, "title": str(data.get("title") or name), "description": data.get("description"),
-            "params": params, "build": build, "source": "user", "path": str(path)}
+    return registry.templates_dir()
 
 
 def clear_user_templates() -> None:
     """Forget all user templates (the directory is kept for a later reload)."""
-    USER_TEMPLATES.clear()
-    USER_TEMPLATE_ERRORS.clear()
+    registry.clear_user_templates()
 
 
-def load_user_templates(directory: Optional[Path | str] = None) -> List[Dict[str, str]]:
-    """(Re)load the user template directory (default: ``templates_dir()``). Bad files are skipped and
-    reported as ``{"path", "error"}``, never fatal; a missing directory is not an error."""
-    global _user_dir
-    _user_dir = Path(directory).expanduser() if directory else templates_dir()
-    loaded: Dict[str, Dict[str, Any]] = {}
-    errs: List[Dict[str, str]] = []
-    files = sorted([*_user_dir.glob("*.yaml"), *_user_dir.glob("*.yml")]) if _user_dir.is_dir() else []
-    for f in files:
-        try:
-            t = _user_template(yaml.safe_load(f.read_text(encoding="utf-8")), f)
-            if t["name"] in loaded:
-                raise ValueError(f"template {t['name']!r} already defined in {loaded[t['name']]['path']}")
-            loaded[t["name"]] = t
-        except (OSError, yaml.YAMLError, ValueError) as e:
-            errs.append({"path": str(f), "error": str(e)})
-    USER_TEMPLATES.clear()
-    USER_TEMPLATES.update(loaded)
-    USER_TEMPLATE_ERRORS[:] = errs
-    return errs
-
-
-def _escape(v: Any) -> Any:
-    if isinstance(v, str):
-        return v.replace("{", "{{").replace("}", "}}")
-    if isinstance(v, list):
-        return [_escape(x) for x in v]
-    if isinstance(v, dict):
-        return {k: _escape(x) for k, x in v.items()}
-    return v
+def load_user_templates(directory: Optional[Union[Path, str]] = None) -> List[Dict[str, str]]:
+    """(Re)load the user template directory; bad files are reported as ``{"path", "error"}``, never fatal."""
+    return registry.load_user_templates(directory)
 
 
 def device_as_template(dev: DeviceConfig, name: str, title: Optional[str] = None,
                        description: Optional[str] = None) -> str:
-    """YAML text of a user template built from a device's expanded points (literal values, no params).
-
-    A device byte / word order other than ``big`` is copied onto the points that do not set their own.
-    """
-    if not NAME_RE.match(name):
-        raise ValueError(f"invalid template name {name!r} (letters, digits, _ . -)")
-    pts = []
-    for p in expand_device(dev):
-        d = p.model_dump(mode="json", exclude_none=True, exclude_defaults=True)
-        d = {"name": p.name, **{k: v for k, v in d.items() if k != "name"}}
-        for k in ("byte_order", "word_order"):
-            if getattr(dev, k) != "big" and k not in d:
-                d[k] = getattr(dev, k)
-        if "labels" in d:
-            d["labels"] = {int(k): v for k, v in d["labels"].items()}
-        pts.append({k: (v if k == "name" else _escape(v)) for k, v in d.items()})
-    doc = {"name": name, "title": title or name,
-           "description": description or f"Saved from device {dev.name}", "params": {}, "points": pts}
-    return yaml.safe_dump(doc, allow_unicode=True, sort_keys=False)
+    """YAML text of a user template built from a device's expanded points (literal values, no params)."""
+    return registry.device_as_template(dev, name, title, description)

@@ -1,8 +1,8 @@
 """Simulation engine: register images, point <-> register mapping, tick loop, listeners, trace, push.
 
-Structure (tick loop ``_run`` / ``step`` / ``_scan_changes`` / subscriber queues / log events) follows
-sme-bac-sim ``sme_bacnet_sim/engine.py`` @ ebd27ec (lines 1126-1215); everything below the point level is
-Modbus specific (design §3, §5.1-5.5).
+The generic part (subscriber queues, log events, validate -> build -> swap -> roll back reload, run / pause /
+time scale, tick + stats push) comes from ``sme_sim_common.engine.BaseEngine``; this module adds the Modbus
+specific parts (design §3, §5.1-5.5): register images, listeners, protocol write validation, trace, faults.
 
 Value model:
   * Each point keeps an engineering ``value`` (float precision for numeric types, so slow counters
@@ -24,7 +24,6 @@ Value model:
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import math
 import time
@@ -33,6 +32,8 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional, Tuple
+
+from sme_sim_common.engine import BaseEngine
 
 from . import __version__
 from .behaviors import Behavior, ident, make_behavior
@@ -362,53 +363,50 @@ class ListenerStats:
                 "requests": dict(self.requests), "exceptions": dict(self.exceptions)}
 
 
-class Engine:
+class Engine(BaseEngine):
     """Owns the devices, the Modbus listeners and the tick loop. All on one asyncio loop."""
 
+    event_size = EVENT_SIZE
+    queue_size = QUEUE_SIZE
+    stats_interval = STATS_INTERVAL  # seconds between {"type": "stats"} pushes on /ws
+
     def __init__(self, config: SimConfig, base_dir: Optional[Path | str] = None, *,
-                 config_text: Optional[str] = None,
+                 config_text: Optional[str] = None, config_path: Optional[Path | str] = None,
                  listener_overrides: Optional[Dict[str, Dict[str, Any]]] = None):
         """``listener_overrides`` = {listener id: {"host": ..., "port": ...}} wins over the config
         (also after reloads); port 0 binds an ephemeral port (tests)."""
-        self.base_dir = Path(base_dir) if base_dir else None
         self.listener_overrides = listener_overrides or {}
-        self.sim_time = 0.0
         self.sim_epoch = time.time()
-        self.events: Deque[Dict[str, Any]] = deque(maxlen=EVENT_SIZE)
-        self._seq = 0
         self.trace_buf: Deque[Dict[str, Any]] = deque(maxlen=TRACE_SIZE)
         self._trace_pending: List[Dict[str, Any]] = []
         self.stats: Dict[str, ListenerStats] = {}
-        self.servers: Dict[str, ModbusTcpServer] = {}
-        self._subs: List[asyncio.Queue] = []
-        self.stats_interval = STATS_INTERVAL  # seconds between {"type": "stats"} pushes on /ws
-        self._stats_at = 0.0
+        self.servers: Dict[str, Any] = {}
+        self.devices: Dict[str, DeviceRuntime] = {}
         self._last: Dict[Tuple[str, str], Any] = {}
-        self._task: Optional[asyncio.Task] = None
         self._scan: Optional[asyncio.Event] = None
-        self._lock: Optional[asyncio.Lock] = None
-        self._stopping = False
         self.faults = FaultManager(self.publish)  # runtime fault rules (design 5.4), survive reloads
-        self._build(config)
-        self.config_text = config_text if config_text is not None else dump_yaml(config)
+        super().__init__(config, config_text=config_text, config_path=config_path,
+                         base_dir=base_dir)  # base_dir defaults to the config file's directory
 
     # ------------------------------------------------------------- building
-    def _build(self, config: SimConfig) -> None:
-        devices: Dict[str, DeviceRuntime] = {}
-        for d in config.devices:
-            devices[d.name] = DeviceRuntime(self, d, self.base_dir, config)
-        self.config = config
-        self.devices = devices
+    def _build(self, config: SimConfig) -> Dict[str, DeviceRuntime]:
+        return {d.name: DeviceRuntime(self, d, self.base_dir, config) for d in config.devices}
+
+    def _install(self, state: Dict[str, DeviceRuntime]) -> None:
+        self.state = self.devices = state
         self._last = {}
+
+    def dump_config(self, config: SimConfig) -> str:
+        return dump_yaml(config)
 
     def _listener_addr(self, lc) -> Tuple[str, int]:
         o = self.listener_overrides.get(lc.id, {})
         return o.get("host", lc.host), o.get("port", lc.port)
 
-    def _make_servers(self) -> Dict[str, Any]:
+    def _make_servers(self, config: SimConfig, devices: Dict[str, DeviceRuntime]) -> Dict[str, Any]:
         servers: Dict[str, Any] = {}
-        for lc in self.config.listeners:
-            units = {d.cfg.unit_id: d.store for d in self.devices.values() if lc.id in d.listeners}
+        for lc in config.listeners:
+            units = {d.cfg.unit_id: d.store for d in devices.values() if lc.id in d.listeners}
             host, port = self._listener_addr(lc)
             self.stats.setdefault(lc.id, ListenerStats())
             if lc.type == "rtu":
@@ -446,12 +444,10 @@ class Engine:
     # ------------------------------------------------------------ lifecycle
     async def start(self) -> None:
         self._scan = asyncio.Event()
-        self._lock = asyncio.Lock()
-        self._stopping = False
-        self.servers = self._make_servers()
+        self.servers = self._make_servers(self.config, self.devices)
         await self._start_servers(self.servers)
         self._log_listeners(self.servers)
-        self._task = asyncio.create_task(self._run())
+        await super().start()
 
     def _log_listeners(self, servers: Dict[str, Any]) -> None:
         for lid, s in servers.items():
@@ -462,72 +458,35 @@ class Engine:
 
     async def stop(self) -> None:
         self._stopping = True
-        if self._scan is not None:
-            self._scan.set()
-        if self._task is not None:
-            self._task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await self._task
-            self._task = None
+        self._kick()
+        await super().stop()
         for s in self.servers.values():
             await s.stop()
         self.servers = {}
 
-    async def reload(self, config: SimConfig, config_text: Optional[str] = None) -> None:
-        """Replace the configuration: devices are rebuilt and listeners rebound without a process restart.
+    async def _apply_diff(self, old_config: SimConfig, new_config: SimConfig,
+                          new_state: Dict[str, DeviceRuntime]) -> None:
+        """Rebind the listeners for the new devices (the old ones are stopped first so ports can be reused).
 
-        On failure (bad behavior, port in use) the previous configuration keeps running and ValueError is raised.
-        """
-        lock = self._lock or asyncio.Lock()
-        async with lock:
-            old_cfg, old_devices, old_servers = self.config, self.devices, self.servers
-            self._build(config)  # raises before anything is stopped
-            for s in old_servers.values():
-                await s.stop()
-            new_servers = self._make_servers()
-            try:
-                if self._task is not None or old_servers:
-                    await self._start_servers(new_servers)
-            except Exception:
-                self.config, self.devices, self._last = old_cfg, old_devices, {}
-                self.servers = self._make_servers()
-                with contextlib.suppress(Exception):
-                    await self._start_servers(self.servers)
-                raise
-            self.servers = new_servers
-            self.stats = {lid: self.stats.get(lid, ListenerStats()) for lid in new_servers}
-            for lid, s in new_servers.items():
-                if s.error:
-                    self.log_event("error", f"listener {lid} ({s.framer}): {s.error}")
-            self.config_text = config_text if config_text is not None else dump_yaml(config)
-        self.log_event("config", f"configuration reloaded ({len(self.devices)} devices)")
-        self.publish({"type": "reload"})
+        A TCP bind error raises; ``_rollback`` then restarts the previous listeners."""
+        old_servers = self.servers
+        for s in old_servers.values():
+            await s.stop()
+        new_servers = self._make_servers(new_config, new_state)
+        if self._task is not None or old_servers:
+            await self._start_servers(new_servers)
+        self._install(new_state)
+        self.servers = new_servers
+        self.stats = {lid: self.stats.get(lid, ListenerStats()) for lid in new_servers}
+        for lid, s in new_servers.items():
+            if s.error:
+                self.log_event("error", f"listener {lid} ({s.framer}): {s.error}")
 
-    # -------------------------------------------------------- subscriptions
-    def subscribe(self) -> asyncio.Queue:
-        q: asyncio.Queue = asyncio.Queue(maxsize=QUEUE_SIZE)
-        self._subs.append(q)
-        return q
-
-    def unsubscribe(self, q: asyncio.Queue) -> None:
-        with contextlib.suppress(ValueError):
-            self._subs.remove(q)
-
-    def publish(self, msg: Dict[str, Any]) -> None:
-        for q in list(self._subs):
-            if q.full():
-                with contextlib.suppress(asyncio.QueueEmpty):
-                    q.get_nowait()  # slow consumer: drop the oldest message
-            with contextlib.suppress(asyncio.QueueFull):
-                q.put_nowait(msg)
-
-    def log_event(self, level: str, message: str) -> Dict[str, Any]:
-        self._seq += 1
-        ev = {"seq": self._seq, "t": time.time(), "level": level, "message": message}
-        self.events.append(ev)
-        (log.error if level == "error" else log.info)(message)
-        self.publish({"type": "log", "event": ev})
-        return ev
+    async def _rollback(self, old_config: SimConfig, old_state: Dict[str, DeviceRuntime],
+                        error: BaseException) -> None:
+        self._install(old_state)
+        self.servers = self._make_servers(old_config, old_state)
+        await self._start_servers(self.servers)
 
     def _kick(self) -> None:
         if self._scan is not None:
@@ -590,17 +549,6 @@ class Engine:
         self._kick()
         return p.read()
 
-    def set_running(self, running: Optional[bool] = None, time_scale: Optional[float] = None) -> None:
-        sim = self.config.simulation
-        if time_scale is not None:
-            if not 0 < float(time_scale) <= 3600:
-                raise ValueError("time_scale must be in (0, 3600]")
-            sim.time_scale = float(time_scale)
-        if running is not None:
-            sim.running = bool(running)
-        self.log_event("info", f"simulation {'running' if sim.running else 'paused'} (x{sim.time_scale:g})")
-        self.publish({"type": "simulation", "running": sim.running, "time_scale": sim.time_scale})
-
     def history(self, device: str, point: str) -> List[Tuple[float, float]]:
         return list(self._point(device, point).history)
 
@@ -610,24 +558,21 @@ class Engine:
         return dt.hour + dt.minute / 60 + dt.second / 3600
 
     def snapshot(self) -> Dict[str, Any]:
-        sim = self.config.simulation
         stats = self.stats_snapshot()
-        return {"version": __version__, "running": sim.running, "time_scale": sim.time_scale,
-                "tick_seconds": sim.tick_seconds, "sim_time": self.sim_time, "sim_hour": self.sim_hour,
+        return {"version": __version__, "running": self.running, "time_scale": self.time_scale,
+                "tick_seconds": self.tick_seconds, "sim_time": self.sim_time, "sim_hour": self.sim_hour,
                 "listeners": [{"id": l.id, "type": l.type, **{k: v for k, v in stats[l.id].items()
                                                               if k in ("host", "port", "bound_port", "clients", "status", "error")}}
                               for l in self.config.listeners],
                 "devices": [d.info() for d in self.devices.values()],
                 "events": list(self.events), "stats": stats}
 
-    state = snapshot
 
     # ------------------------------------------------------------ tick loop
     def _pv(self, device: str, point: str) -> Any:
         return self._point(device, point).value
 
-    def step(self, dt: float) -> None:
-        self.sim_time += dt
+    def _step(self, dt: float) -> None:
         base = {"t": self.sim_time, "dt": dt, "hour": self.sim_hour, "pv": self._pv}
         for dev in self.devices.values():
             if self.faults.is_frozen(dev.cfg.unit_id, dev.listeners):
@@ -670,21 +615,22 @@ class Engine:
             events, self._trace_pending = self._trace_pending, []
             self.publish({"type": "trace", "events": events})
 
+    def _on_tick(self) -> None:
+        self._scan_changes()
+
     async def _run(self) -> None:
+        """``BaseEngine._run`` plus a wake-up: a protocol write or trace event (``_kick``) pushes values / trace
+        within ~50 ms instead of waiting for the next tick."""
         loop = asyncio.get_running_loop()
         nxt = loop.time()
         while not self._stopping:
-            sim = self.config.simulation
-            now = loop.time()
-            if now >= nxt:
+            if loop.time() >= nxt:
                 async with self._lock:
-                    if sim.running:
-                        self.step(sim.tick_seconds * sim.time_scale)
-                    self._scan_changes()
-                if self._subs and now >= self._stats_at:  # per-listener counters, only while someone listens
-                    self._stats_at = now + self.stats_interval
-                    self.publish({"type": "stats", "t": time.time(), "stats": self.stats_snapshot()})
-                nxt = max(nxt + sim.tick_seconds, loop.time())
+                    try:
+                        self.tick()
+                    except Exception as e:  # keep the loop alive; surface the error
+                        self.log_event("error", f"tick failed: {type(e).__name__}: {e}")
+                nxt = max(nxt + self.tick_seconds, loop.time())
             try:
                 await asyncio.wait_for(self._scan.wait(), timeout=max(0.0, nxt - loop.time()))
                 self._scan.clear()

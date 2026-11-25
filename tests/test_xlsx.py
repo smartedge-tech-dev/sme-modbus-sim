@@ -69,7 +69,9 @@ def test_blank_template_layout():
 @pytest.mark.parametrize("src", ["demo", "rich"])
 def test_round_trip(src):
     cfg = load_file(DEMO) if src == "demo" else parse_text(RICH)
-    back, warnings = import_xlsx(export_xlsx(cfg), cfg)
+    data, export_warnings = export_xlsx(cfg)
+    assert export_warnings == []
+    back, warnings = import_xlsx(data, cfg)
     assert back is not None, warnings
     assert warnings == []
     assert back.model_dump() == cfg.model_dump()
@@ -162,3 +164,14 @@ def test_import_not_a_workbook():
     wb.save(buf)
     cfg, errs = import_xlsx(buf.getvalue())
     assert cfg is None and errs == ["sheet 'Points' is missing"]
+
+
+def test_export_overlong_cell_is_a_warning():
+    from sme_modbus_sim.xlsx import CELL_LIMIT
+
+    cfg = parse_text("devices: [{name: X, unit_id: 1, points: [{name: a, table: holding, description: '"
+                     + "x" * (CELL_LIMIT + 1) + "'}]}]")
+    data, warnings = export_xlsx(cfg)
+    assert len(warnings) == 1 and "Points row 3, column 'description'" in warnings[0]
+    back, errs = import_xlsx(data, cfg)
+    assert back is not None and back.devices[0].points[0].description is None, errs

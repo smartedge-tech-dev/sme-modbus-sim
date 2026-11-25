@@ -167,7 +167,7 @@ def test_engine_serial_listener_and_reload():
             await e.start()
             try:
                 await m.connected()
-                st = e.state()
+                st = e.snapshot()
                 lst = {x["id"]: x for x in st["listeners"]}
                 assert lst["s"]["status"] == "running" and lst["s"]["clients"] == 1 and lst["s"]["port"] == m.url
                 assert lst["t"]["status"] == "running"
@@ -193,10 +193,10 @@ def test_engine_keeps_running_when_serial_port_fails():
         e = Engine(_cfg(_closed_port_url()), listener_overrides={"t": {"port": 0}})
         await e.start()
         try:
-            lst = {x["id"]: x for x in e.state()["listeners"]}
+            lst = {x["id"]: x for x in e.snapshot()["listeners"]}
             assert lst["s"]["status"] == "error" and "cannot open" in lst["s"]["error"]
             assert lst["t"]["status"] == "running" and lst["s"]["clients"] == 0
-            assert any(ev["level"] == "error" and "listener s" in ev["message"] for ev in e.state()["events"])
+            assert any(ev["level"] == "error" and "listener s" in ev["message"] for ev in e.snapshot()["events"])
         finally:
             await e.stop()
 

@@ -1,8 +1,9 @@
 # PyInstaller spec (onefile). Build from the repo root:
 #   pyinstaller packaging/sme-modbus-sim.spec --noconfirm
 # SPECPATH is the directory of this spec file (packaging/).
+# The shared web shell (sme_sim_common/static) and the uvicorn / multipart / yaml / websockets hidden imports
+# come from the sme-sim-common PyInstaller hook (pyinstaller40 entry point); only product files are listed here.
 import os
-from PyInstaller.utils.hooks import collect_submodules
 
 root = os.path.abspath(os.path.join(SPECPATH, ".."))
 
@@ -13,10 +14,7 @@ datas = [
     (os.path.join(root, "configs", "demo-site.yaml"), "configs"),
 ]
 
-hiddenimports = (
-    collect_submodules("uvicorn")
-    + ["multipart", "yaml", "h11", "websockets", "httptools", "serial"]
-)
+hiddenimports = ["serial"]  # pyserial (RTU listeners), imported lazily
 
 a = Analysis(
     [os.path.join(root, "packaging", "entry.py")],

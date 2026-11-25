@@ -1,12 +1,11 @@
 "use strict";
 // SME ModbusSim web UI: vanilla JS, no build step. Generic chrome (header, menus, footer, theme, i18n)
-// lives in shell/shell.js (vendored from SME BACnetSim); this file holds the Modbus-specific UI.
+// comes from the sme-sim-common shell (/sme-sim-common/shell/shell.js); UI strings live in i18n/{en,ja,zh}.js.
 // Structure (api / snapshot / trend / websocket) follows SME BACnetSim app.js @ ebd27ec.
 
 // ------------------------------------------------------------------ product config (single spot)
 
 const REPO_URL = "https://github.com/smartedge-tech-dev/sme-modbus-sim";
-const CONTACT_URL = "https://smartedge-tech.com/contact/";
 const PRODUCT = {
   product: "SME ModbusSim",
   tagline: "MODBUS DEVICE SIMULATOR",
@@ -18,243 +17,11 @@ const PRODUCT = {
     issues: `${REPO_URL}/issues/new`,
     license: `${REPO_URL}/blob/main/LICENSE`,
   },
-  vendor: {
-    name: "smart-edge",
-    nameLocal: "智届科技",
-    url: "https://smartedge-tech.com",
-    contactUrl: CONTACT_URL,
-    email: "business@smartedge-tech.com",
-    logoUrl: "/static/brand/company-logo.svg",
-    blurb: "vendor.blurb",
-    services: ["vendor.svc.ems", "vendor.svc.market", "vendor.svc.edge", "vendor.svc.integration",
-      "vendor.svc.ai", "vendor.svc.cloud"],
-  },
   // Register-grid mark; navy parts use currentColor, the accent block stays brand blue.
   logoSvg: `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M5 8h22v24H5zM5 16h22M5 24h22M16 8v24M4 34h32" stroke="currentColor" stroke-width="2.4"/>
     <rect x="25.5" y="11" width="10" height="10" fill="#087def"/></svg>`,
 };
-
-// ------------------------------------------------------------------ UI strings (en)
-
-Shell.addStrings("en", {
-  "vendor.blurb": "Nanjing Smart-Edge Technology Co., Ltd. (南京智届科技有限公司) has, since its founding in 2023, " +
-    "developed end-to-end software for distributed energy resources such as solar, batteries and EVs — " +
-    "from equipment control to the cloud and electricity markets. The team supports projects in Japanese, " +
-    "from requirements definition through design, implementation, operation and maintenance.",
-  "vendor.svc.ems": "Energy management systems (EMS)",
-  "vendor.svc.market": "RA / AC systems for electricity markets (JEPX, EPRX, OCCTO)",
-  "vendor.svc.edge": "Edge IoT and equipment-control software",
-  "vendor.svc.integration": "Equipment integration: Modbus, MQTT, BACnet, ECHONET Lite, OpenADR 2.0b",
-  "vendor.svc.ai": "Energy forecasting and data analytics",
-  "vendor.svc.cloud": "Cloud infrastructure design, build and operation",
-  "menu.file": "File",
-  "menu.file.config": "Edit configuration…",
-  "menu.file.save": "Save configuration",
-  "menu.file.save.title": "Write the applied configuration back to the config file",
-  "menu.sim": "Simulation",
-  "menu.sim.run": "Run",
-  "menu.sim.pause": "Pause",
-  "menu.sim.speed": "Time scale",
-  "menu.view": "View",
-  "menu.view.traffic": "Traffic",
-  "menu.view.stats": "Statistics",
-  "menu.view.log": "Event log",
-  "menu.view.addr": "Address notation",
-  "addr.zero": "0-based (PDU address)",
-  "addr.one": "1-based",
-  "addr.modicon": "Reference (0xxxx / 1xxxx / 3xxxx / 4xxxx)",
-  "addr.zero.short": "Addr (0-based)",
-  "addr.one.short": "Addr (1-based)",
-  "addr.modicon.short": "Ref (4xxxx)",
-  "side.filter": "Filter devices / points",
-  "side.listeners": "Listeners",
-  "col.name": "Name",
-  "col.table": "Table",
-  "col.address.title": "Click to switch address notation (0-based / 1-based / 4xxxx)",
-  "col.datatype": "Type",
-  "col.order": "Order",
-  "col.order.title": "Byte / word order of multi-register values (ABCD = big-endian)",
-  "col.value": "Value",
-  "col.raw": "Raw",
-  "col.raw.title": "Register image as seen by a Modbus master (hex words / bits)",
-  "col.access": "Access",
-  "col.behavior": "Behavior",
-  "table.coil": "Coil",
-  "table.discrete": "Discrete input",
-  "table.input": "Input register",
-  "table.holding": "Holding register",
-  "access.r": "R",
-  "access.rw": "R/W",
-  "access.r.title": "Read-only for Modbus masters (the UI can still write it)",
-  "access.rw.title": "Writable by Modbus masters",
-  "val.on": "ON",
-  "val.off": "OFF",
-  "val.edit": "Click to write a new value",
-  "val.toggle": "Click to toggle",
-  "write.ok": "{point} ← {value}",
-  "dev.none": "No devices configured — use File › Edit configuration.",
-  "dev.item": "unit {unit} · {tpl} · {lsn}",
-  "dev.meta": "unit {unit} · template {tpl} · listeners {lsn} · byte {bo} / word {wo} · undefined address: {ua}",
-  "dev.custom": "custom",
-  "dev.points": "{n} points",
-  "dev.errors": "{n} point(s) with errors",
-  "lsn.item": "{id} · {type} · {host}:{port} · {n} client(s)",
-  "lsn.down": "{id} · {type} · {host}:{port} · not bound",
-  "lsn.summary": "{n} listener(s) · {c} client(s)",
-  "trend.close": "Close trend",
-  "trend.empty": "No history yet",
-  "tab.traffic": "Traffic",
-  "tab.stats": "Statistics",
-  "tab.log": "Event log",
-  "tab.collapse": "Collapse / expand the bottom pane",
-  "tr.unit": "Unit",
-  "tr.fc": "FC",
-  "tr.exc": "Exceptions / errors only",
-  "tr.pause": "Pause",
-  "tr.resume": "Resume",
-  "tr.clear": "Clear",
-  "tr.export": "Export JSONL",
-  "tr.export.title": "Download the buffered rows that match the current filters as JSON Lines",
-  "tr.info": "{shown} / {total} rows (max {max})",
-  "tr.paused": "paused · {n} new",
-  "tr.col.time": "Time",
-  "tr.col.listener": "Listener",
-  "tr.col.peer": "Peer",
-  "tr.col.dir": "Dir",
-  "tr.col.unit": "Unit",
-  "tr.col.fc": "FC",
-  "tr.col.summary": "Summary",
-  "tr.col.hex": "Hex",
-  "tr.exported": "Exported {n} rows",
-  "stats.refresh": "Refresh",
-  "stats.requests": "Requests by function code",
-  "stats.exceptions": "Exceptions by code",
-  "stats.count": "Count",
-  "stats.none": "none",
-  "stats.meta": "{type} · {host}:{port} · clients {clients} · connections {conn} · rx {rx} · tx {tx} · dropped {dropped}",
-  "stats.empty": "No listeners",
-  "exc.01": "Illegal function",
-  "exc.02": "Illegal data address",
-  "exc.03": "Illegal data value",
-  "exc.04": "Server device failure",
-  "exc.05": "Acknowledge",
-  "exc.06": "Server device busy",
-  "exc.08": "Memory parity error",
-  "exc.0A": "Gateway path unavailable",
-  "exc.0B": "Gateway target device failed to respond",
-  "status.running": "Running",
-  "status.paused": "Paused",
-  "status.toggle": "Simulation is {state} — click to toggle",
-  "status.clock": "Simulation clock",
-  "status.scale": "Time scale",
-  "status.ws.on": "WebSocket connected",
-  "status.ws.off": "WebSocket disconnected",
-  "status.connecting": "connecting…",
-  "cfg.title": "Configuration (YAML)",
-  "cfg.hint": "Apply reloads the running simulator; Save to file writes the applied configuration back to the config file.",
-  "cfg.save": "Save to file",
-  "cfg.saved": "Saved to {path}",
-  "cfg.applied": "Configuration applied ({n} devices)",
-  "menu.file.xlsx.export": "Export Excel point table",
-  "menu.file.xlsx.blank": "Download blank Excel template",
-  "menu.file.xlsx.import": "Import Excel point table…",
-  "menu.tpl": "Templates",
-  "menu.tpl.reload": "Reload user templates",
-  "xlsx.imported": "Excel point table imported ({n} devices)",
-  "xlsx.errors.title": "Excel import errors",
-  "xlsx.errors.hint": "Nothing was applied. Fix the listed rows and import again.",
-  "xlsx.warnings.title": "Imported with warnings",
-  "tpl.reloaded": "User templates reloaded: {n} from {dir}",
-  "tpl.errors.title": "Skipped user template files",
-  "tpl.save": "Save as template",
-  "tpl.save.title": "Save this device's expanded points as a user template",
-  "tpl.save.prompt": "Template name (letters, digits, _ . -)",
-  "tpl.save.exists": "Template '{name}' already exists. Overwrite it?",
-  "tpl.saved": "Template {name} saved to {path}",
-  "dev.add": "Add device",
-  "dev.add.title": "Add a device from a template",
-  "devdlg.title": "Add device",
-  "devdlg.template": "Template",
-  "devdlg.custom": "No template",
-  "devdlg.custom.desc": "Empty device; add points later in its YAML",
-  "devdlg.src.builtin": "built-in",
-  "devdlg.src.user": "user",
-  "devdlg.params": "Parameters",
-  "devdlg.noparams": "No parameters.",
-  "devdlg.name": "Name",
-  "devdlg.unit": "Unit ID",
-  "devdlg.listeners": "Listeners",
-  "devdlg.create": "Add",
-  "dev.added": "Device {name} added (unit {unit})",
-  "dev.dup": "Duplicate",
-  "dev.dup.title": "Copy this device with the next free unit ID",
-  "dev.duplicated": "Device {name} added as a copy (unit {unit})",
-  "dev.del": "Delete",
-  "dev.del.title": "Delete this device",
-  "dev.del.confirm": "Delete device {name}? The running simulator is reloaded; use File > Save to keep the change.",
-  "dev.deleted": "Device {name} deleted",
-  "dev.yaml": "YAML",
-  "dev.yaml.tip": "Edit this device's configuration",
-  "dev.yaml.title": "Device {name} (YAML)",
-  "dev.yaml.hint": "Only this device. Apply validates it and reloads the running simulator; File > Save writes the file.",
-  "dev.updated": "Device {name} updated",
-  "val.null": "— (null)",
-  "val.null.hint": "empty = null (not available)",
-  "tab.faults": "Faults",
-  "menu.view.faults": "Faults",
-  "ft.dev": "Device",
-  "ft.nodev": "(select a device)",
-  "ft.q.timeout": "Timeout",
-  "ft.q.timeout.title": "Stop answering requests to the selected device (no response)",
-  "ft.q.exc04": "Exception 04",
-  "ft.q.exc04.title": "Answer every request to the selected device with exception 04 (server device failure)",
-  "ft.q.busy": "Busy 10 s",
-  "ft.q.busy.title": "Answer exception 06 (server device busy) for 10 seconds",
-  "ft.q.freeze": "Freeze values",
-  "ft.q.freeze.title": "Stop behaviors from updating the selected device's values (Modbus keeps answering)",
-  "ft.add": "Add rule…",
-  "ft.import": "Import preset…",
-  "ft.import.title": "Load a JSON / YAML preset file; it replaces the current rules",
-  "ft.export": "Export preset",
-  "ft.clear": "Clear all",
-  "ft.clear.confirm": "Delete all fault rules?",
-  "ft.empty": "No fault rules. Use the quick buttons for the selected device or add a rule.",
-  "ft.col.on": "On",
-  "ft.col.id": "Rule",
-  "ft.col.action": "Action",
-  "ft.col.scope": "Scope",
-  "ft.col.params": "Params",
-  "ft.col.gate": "Trigger",
-  "ft.col.count": "Hits",
-  "ft.delete": "Delete rule",
-  "ft.scope.all": "all requests",
-  "ft.every": "every {n}th",
-  "ft.remaining": "{n} left",
-  "ft.busy.left": "{s} s left",
-  "ft.any": "(any)",
-  "ft.f.listener": "Listener",
-  "ft.f.unit": "Unit",
-  "ft.f.fc": "FC",
-  "ft.f.start": "Address from",
-  "ft.f.end": "to",
-  "ft.f.action": "Action",
-  "ft.f.params": "Params (JSON)",
-  "ft.f.prob": "Probability",
-  "ft.f.every": "Every N",
-  "ft.f.remaining": "Count",
-  "ft.f.remaining.title": "Fire this many times, then disable the rule",
-  "ft.f.add": "Add",
-  "ft.params.bad": "Params must be a JSON object",
-  "ft.added": "Fault rule {id} added",
-  "ft.imported": "Fault preset loaded ({n} rules)",
-  "ft.cleared": "All fault rules deleted",
-  "errdlg.close": "Close",
-  "dlg.cancel": "Cancel",
-  "dlg.apply": "Apply",
-  "about.stack": "Protocol stack",
-  "about.stack.value": "Modbus TCP / RTU over TCP server (pure Python asyncio), multiple unit IDs per listener",
-});
 
 const t = Shell.t;
 
@@ -401,17 +168,17 @@ function speedItems(cur) {
 
 function renderSim(sim) {
   const ind = $("runInd");
-  const state = sim.running ? t("status.running") : t("status.paused");
+  const state = sim.running ? t("common.sim.running") : t("common.sim.paused");
   ind.classList.toggle("paused", !sim.running);
   ind.querySelector(".st-run-lbl").textContent = state;
-  ind.title = t("status.toggle", { state: state.toLowerCase() });
+  ind.title = t("common.sim.toggle", { state });
   ind.setAttribute("aria-label", ind.title);
   const sel = $("scaleSel");
   if (sim.time_scale != null) {
     const list = SPEEDS.includes(sim.time_scale) ? SPEEDS : [...SPEEDS, sim.time_scale].sort((a, b) => a - b);
     sel.innerHTML = list.map((s) => `<option value="${s}"${s === sim.time_scale ? " selected" : ""}>${s}×</option>`).join("");
   }
-  Shell.updateItem("sim.run", { label: sim.running ? "menu.sim.pause" : "menu.sim.run" });
+  Shell.updateItem("sim.run", { label: sim.running ? "common.sim.pause" : "common.sim.run" });
   Shell.updateItem("sim.speed", { submenu: speedItems(sim.time_scale) });
 }
 
@@ -472,7 +239,7 @@ function renderDevice() {
     ${d.description ? `<span class="meta">${esc(d.description)}</span>` : ""}
     <span class="meta">${esc(t("dev.meta", { unit: d.unit_id, tpl: d.template || t("dev.custom"), lsn: (d.listeners || []).join(", "),
       bo: d.byte_order, wo: d.word_order, ua: d.undefined_address }))}</span>
-    <button type="button" class="btn small tplsave" id="tplSave" title="${esc(t("tpl.save.title"))}">${esc(t("tpl.save"))}</button>
+    <button type="button" class="btn small tplsave" id="tplSave" title="${esc(t("common.device_templates.save.title"))}">${esc(t("common.device_templates.save"))}</button>
     <button type="button" class="btn small" id="devDup" title="${esc(t("dev.dup.title"))}">${esc(t("dev.dup"))}</button>
     <button type="button" class="btn small" id="devYaml" title="${esc(t("dev.yaml.tip"))}">${esc(t("dev.yaml"))}</button>
     <button type="button" class="btn small danger" id="devDel" title="${esc(t("dev.del.title"))}">${esc(t("dev.del"))}</button>`;
@@ -878,14 +645,15 @@ async function editConfig() {
 }
 
 async function applyConfig(text) {
-  const r = await api("PUT", "/api/config", text, true);
+  await api("PUT", "/api/config", text, true);
   S.cfgApplied = text;
-  Shell.toast(t("cfg.applied", { n: r.devices }), "ok");
+  const st = await api("GET", "/api/state");   // PUT /api/config answers {"ok": true} only
+  Shell.toast(t("cfg.applied", { n: st.devices.length }), "ok");
 }
 
 async function saveConfig() {
   const r = await api("POST", "/api/config/save");
-  Shell.toast(t("cfg.saved", { path: r.path }), "ok");
+  Shell.toast(t("common.config.saved", { path: r.path }), "ok");
 }
 
 $("yamlApply").onclick = async (ev) => {
@@ -939,7 +707,8 @@ async function importXlsx(file) {
       else toast(typeof d === "string" ? d : `HTTP ${r.status}`);
       return;
     }
-    Shell.toast(t("xlsx.imported", { n: data.devices }), "ok");
+    const st = await api("GET", "/api/state").catch(() => null);   // the import answers {ok, warnings}
+    Shell.toast(t("xlsx.imported", { n: st ? st.devices.length : "?" }), "ok");
     if (data.warnings?.length) showErrors(t("xlsx.warnings.title"), "", data.warnings);
   } catch (e) { toast(e.message); }
 }
@@ -953,23 +722,23 @@ $("xlsxFile").onchange = (ev) => {
 async function reloadTemplates() {
   try {
     const r = await api("POST", "/api/templates/reload");
-    Shell.toast(t("tpl.reloaded", { n: r.loaded.length, dir: r.dir }), "ok");
-    if (r.errors.length) showErrors(t("tpl.errors.title"), r.dir, r.errors.map((e) => `${e.path}: ${e.error}`));
+    Shell.toast(t("common.device_templates.reloaded", { n: r.loaded.length, dir: r.dir }), "ok");
+    if (r.errors.length) showErrors(t("common.device_templates.errors.title"), r.dir, r.errors.map((e) => `${e.path}: ${e.error}`));
   } catch (e) { toast(e.message); }
 }
 
 async function saveAsTemplate(dev) {
-  const name = prompt(t("tpl.save.prompt"), dev.replace(/[^A-Za-z0-9_.-]+/g, "_").toLowerCase());
+  const name = prompt(t("common.device_templates.save.prompt"), dev.replace(/[^A-Za-z0-9_.-]+/g, "_").toLowerCase());
   if (!name) return;
   const url = `/api/templates/from-device/${encodeURIComponent(dev)}`;
   try {
     let r;
     try { r = await api("POST", url, { name }); }
     catch (e) {
-      if (!/already exists/.test(e.message) || !confirm(t("tpl.save.exists", { name }))) throw e;
+      if (!/already exists/.test(e.message) || !confirm(t("common.device_templates.save.exists", { name }))) throw e;
       r = await api("POST", url, { name, overwrite: true });
     }
-    Shell.toast(t("tpl.saved", { name: r.name, path: r.path }), "ok");
+    Shell.toast(t("common.device_templates.saved", { name: r.name, path: r.path }), "ok");
   } catch (e) { toast(e.message); }
 }
 
@@ -1056,7 +825,7 @@ async function submitAddDevice(ev) {
     if (lids.length !== (S.snap?.listeners || []).length) body.listeners = lids;   // all checked = all listeners
     const r = await api("POST", "/api/devices", body);
     $("dlgDevice").close();
-    Shell.toast(t("dev.added", { name: r.name, unit: r.unit_id }), "ok");
+    Shell.toast(t("dev.added", { name: r.name, unit: r.device.unit_id }), "ok");
     focusDevice(r.name);
   } catch (e) { $("ddErr").textContent = e.message; }
 }
@@ -1064,7 +833,7 @@ async function submitAddDevice(ev) {
 async function duplicateDevice(name) {
   try {
     const r = await api("POST", `/api/devices/${encodeURIComponent(name)}/duplicate`);
-    Shell.toast(t("dev.duplicated", { name: r.name, unit: r.unit_id }), "ok");
+    Shell.toast(t("dev.duplicated", { name: r.name, unit: r.device.unit_id }), "ok");
     focusDevice(r.name);
   } catch (e) { toast(e.message); }
 }
@@ -1186,28 +955,29 @@ async function importFaults(file) {
 
 Shell.init({
   ...PRODUCT,
+  vendor: Shell.vendors.smartEdge,
   about: [["about.stack", t("about.stack.value")]],
   menus: () => [
-    { id: "file", label: "menu.file", items: [
-      { id: "file.config", label: "menu.file.config", onClick: editConfig },
+    { id: "file", label: "common.menu.file", items: [
+      { id: "file.config", label: "common.config.edit", onClick: editConfig },
       { separator: true },
       { id: "file.xlsx.export", label: "menu.file.xlsx.export", onClick: () => download("/api/config/xlsx") },
-      { id: "file.xlsx.blank", label: "menu.file.xlsx.blank", onClick: () => download("/api/config/xlsx-template") },
-      { id: "file.xlsx.import", label: "menu.file.xlsx.import", onClick: () => $("xlsxFile").click() },
+      { id: "file.xlsx.blank", label: "common.config.xlsx_template", onClick: () => download("/api/config/xlsx-template") },
+      { id: "file.xlsx.import", label: "common.config.import_xlsx", onClick: () => $("xlsxFile").click() },
       { separator: true },
-      { id: "file.save", label: "menu.file.save", title: t("menu.file.save.title"), onClick: () => saveConfig().catch((e) => toast(e.message)) },
+      { id: "file.save", label: "common.config.save", title: t("menu.file.save.title"), onClick: () => saveConfig().catch((e) => toast(e.message)) },
     ] },
-    { id: "sim", label: "menu.sim", items: [
-      { id: "sim.run", label: "menu.sim.pause", onClick: toggleRun },
-      { id: "sim.speed", label: "menu.sim.speed", submenu: speedItems(null) },
+    { id: "sim", label: "common.menu.sim", items: [
+      { id: "sim.run", label: "common.sim.pause", onClick: toggleRun },
+      { id: "sim.speed", label: "common.sim.time_scale", submenu: speedItems(null) },
     ] },
-    { id: "tpl", label: "menu.tpl", items: [
-      { id: "tpl.reload", label: "menu.tpl.reload", onClick: reloadTemplates },
+    { id: "tpl", label: "common.device_templates.menu", items: [
+      { id: "tpl.reload", label: "common.device_templates.reload", onClick: reloadTemplates },
     ] },
-    { id: "view", label: "menu.view", items: [
+    { id: "view", label: "common.menu.view", items: [
       { id: "view.traffic", label: "menu.view.traffic", onClick: () => showTab("traffic") },
       { id: "view.stats", label: "menu.view.stats", onClick: () => showTab("stats") },
-      { id: "view.log", label: "menu.view.log", onClick: () => showTab("log") },
+      { id: "view.log", label: "common.event_log.title", onClick: () => showTab("log") },
       { id: "view.faults", label: "menu.view.faults", onClick: () => showTab("faults") },
       { id: "view.addr", label: "menu.view.addr", submenu: addrItems() },
       { separator: true },
@@ -1219,15 +989,15 @@ Shell.init({
 });
 
 Shell.setStatus(`
-  <span class="st-clock" id="clock" title="${esc(t("status.clock"))}">--:--</span>
+  <span class="st-clock" id="clock" title="${esc(t("common.sim.time"))}">--:--</span>
   <button type="button" class="st-run" id="runInd"><span class="st-run-lbl"></span></button>
-  <select class="st-scale" id="scaleSel" title="${esc(t("status.scale"))}" aria-label="${esc(t("status.scale"))}"></select>
-  <span class="st-net" id="netinfo">${esc(t("status.connecting"))}</span>
-  <span class="conn off" id="conn" role="img" title="${esc(t("status.ws.off"))}" aria-label="${esc(t("status.ws.off"))}"></span>`);
+  <select class="st-scale" id="scaleSel" title="${esc(t("common.sim.time_scale"))}" aria-label="${esc(t("common.sim.time_scale"))}"></select>
+  <span class="st-net" id="netinfo">${esc(t("common.backend.connecting"))}</span>
+  <span class="conn off" id="conn" role="img" title="${esc(t("common.backend.disconnected"))}" aria-label="${esc(t("common.backend.disconnected"))}"></span>`);
 renderSim({ running: true, time_scale: null });
 
 function setConn(on) {
-  const c = $("conn"), lbl = t(on ? "status.ws.on" : "status.ws.off");
+  const c = $("conn"), lbl = t(on ? "common.backend.connected" : "common.backend.disconnected");
   c.classList.toggle("off", !on); c.title = lbl; c.setAttribute("aria-label", lbl);
 }
 
