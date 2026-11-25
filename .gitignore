@@ -6,3 +6,7 @@ build/
 dist/
 *.egg-info/
 site/
+
+# Local AI working notes and Claude Code settings (kept local, as in sme-bac-sim)
+ai/
+.claude/
