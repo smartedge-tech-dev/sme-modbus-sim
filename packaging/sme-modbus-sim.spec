@@ -8,6 +8,7 @@ root = os.path.abspath(os.path.join(SPECPATH, ".."))
 
 datas = [
     (os.path.join(root, "sme_modbus_sim", "static"), "sme_modbus_sim/static"),
+    (os.path.join(root, "sme_modbus_sim", "data", "sunspec"), "sme_modbus_sim/data/sunspec"),
     # __main__ resolves configs/ relative to the package parent directory
     (os.path.join(root, "configs", "demo-site.yaml"), "configs"),
 ]

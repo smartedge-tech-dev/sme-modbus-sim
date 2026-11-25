@@ -90,7 +90,7 @@ client.close()
   Excel point-list import / export, user-local templates, and templates generated from the public SunSpec
   model definitions.
 
-> Not affiliated with, endorsed by, or certified by SunSpec Alliance. SunSpec templates are planned for 0.2.0.
+> Not affiliated with, endorsed by, or certified by SunSpec Alliance. SunSpec templates: `sunspec_pv_inverter` (models 1, 103, 120-123, 160) and `sunspec_meter` (models 1, 203), generated from the public SunSpec model definitions (Apache-2.0).
 
 ## Commercial support & custom development
 

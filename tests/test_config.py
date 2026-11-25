@@ -150,3 +150,16 @@ def test_demo_site_loads_and_round_trips():
     assert mode.labels == {0: "OFF", 1: "ON", 2: "AUTO"}
     again = parse_text(dump_yaml(cfg))
     assert again.model_dump() == cfg.model_dump()
+
+
+def test_sunspec_sf_datatype_scale_ref_and_nullable():
+    from sme_modbus_sim.config import register_count
+
+    cfg = SimConfig.model_validate({"devices": [{"name": "d", "unit_id": 1, "points": [
+        {"name": "w", "table": "holding", "address": 0, "datatype": "int16", "scale_ref": "w_sf", "nullable": True},
+        {"name": "w_sf", "table": "holding", "address": 1, "datatype": "sunspec_sf", "value": -1}]}]})
+    p = cfg.devices[0].points
+    assert p[0].scale_ref == "w_sf" and register_count(p[1]) == 1
+    with pytest.raises(ValueError, match="nullable"):
+        SimConfig.model_validate({"devices": [{"name": "d", "unit_id": 1, "points": [
+            {"name": "s", "table": "holding", "address": 0, "datatype": "string", "count": 2, "nullable": True}]}]})

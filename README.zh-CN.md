@@ -74,7 +74,7 @@ client.close()
 - **0.1.0** — Modbus TCP 与 RTU over TCP、FC 01–06 / 0F / 10、全部数据类型、YAML、Web UI、通用模板、Windows exe、Docker、CI。
 - **0.2.0** — 串口 RTU（COM 口 / `/dev/ttyUSB*`）、FC 16 掩码写、FC 17 读写多个寄存器、FC 2B/0E 读设备标识、故障注入 UI（延迟、丢包、异常、错误 CRC）、Excel 点表导入导出、用户本地模板，以及由公开的 SunSpec 模型定义生成的模板。
 
-> 与 SunSpec Alliance 无任何关联，未获其认可或认证。SunSpec 模板计划在 0.2.0 提供。
+> 与 SunSpec Alliance 无任何关联，未获其认可或认证。SunSpec 模板：`sunspec_pv_inverter`（模型 1、103、120–123、160）与 `sunspec_meter`（模型 1、203），由公开的 SunSpec 模型定义（Apache-2.0）生成。
 
 ## 商务支持与定制开发
 

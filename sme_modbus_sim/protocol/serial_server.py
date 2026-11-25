@@ -18,6 +18,9 @@ Frame delimitation (SER section 2.5.1.1):
 
 Addressing (SER section 2.2): 1..247 individual, 0 broadcast (write FCs executed on every
 unit of the listener, never answered), 248..255 reserved and ignored.
+
+Fault injection: as in ``server.py``; ``disconnect`` is treated as no response (a serial line has
+no connection), ``delay`` queues the response with ``call_later`` so the reader keeps running.
 """
 from __future__ import annotations
 
@@ -29,8 +32,8 @@ import time
 from typing import Callable, Iterable
 
 from .framer import DroppedFrame, Frame, RtuFramer
-from .pdu import describe_request, describe_response, handle_pdu, is_write
-from .server import UNIT_ID_MODES, PduHandler, Resolver, TraceEvent
+from .pdu import describe_request, describe_response, exception_response, handle_pdu, is_write
+from .server import UNIT_ID_MODES, PduHandler, Resolver, TraceEvent, encode_response
 from .store import UnitStore
 
 PARITIES = ("E", "N", "O")
@@ -72,6 +75,7 @@ class ModbusSerialServer:
         pdu_handler: PduHandler = handle_pdu,
         strict_timing: bool = False,
         serial_factory: Callable[..., object] | None = None,
+        faults=None,
     ) -> None:
         if parity not in PARITIES:
             raise ValueError(f"invalid parity: {parity!r}")
@@ -93,6 +97,7 @@ class ModbusSerialServer:
         self.listener_id = listener_id
         self.all_units = all_units
         self.pdu_handler = pdu_handler
+        self.faults = faults
         self.strict_timing = strict_timing
         self.serial_factory = serial_factory
         self.t15 = t15(self.baudrate)
@@ -204,11 +209,11 @@ class ModbusSerialServer:
 
     # ---------------------------------------------------------- loop thread
     def _emit(self, direction: str, raw: bytes, unit_id, fc, summary: str,
-              exception_code: int | None = None, error: str | None = None) -> None:
+              exception_code: int | None = None, error: str | None = None, fault: dict | None = None) -> None:
         if self.trace is None:
             return
         ev = TraceEvent(time.time(), self.listener_id, self.port, direction, raw.hex(" "),
-                        unit_id, fc, summary, exception_code, error)
+                        unit_id, fc, summary, exception_code, error, fault)
         with contextlib.suppress(Exception):
             self.trace(ev)
 
@@ -234,11 +239,28 @@ class ModbusSerialServer:
                 self._emit("rx", item.raw, None, None, "dropped", error=item.reason)
                 continue
             fc = item.pdu[0] if item.pdu else None
-            self._emit("rx", item.raw, item.unit_id, fc, describe_request(item.pdu))
-            resp = self.process_frame(item)
+            hit = None
+            if self.faults is not None and item.pdu and 0 < item.unit_id <= SERIAL_MAX_UNIT:
+                hit = self.faults.evaluate(self.listener_id, "rtu", item.unit_id, item.pdu)
+            self._emit("rx", item.raw, item.unit_id, fc, describe_request(item.pdu),
+                       fault=hit.info if hit is not None else None)
+            if hit is not None and hit.action in ("no_response", "disconnect"):
+                continue
+            if hit is not None and hit.code is not None:
+                resp = exception_response(fc, hit.code)
+            else:
+                resp = self.process_frame(item)
             if resp is None or self._serial is None:
                 continue
-            raw = RtuFramer.build(item.unit_id, resp)
-            summary, exc = describe_response(resp)
-            self._emit("tx", raw, item.unit_id, resp[0] & 0x7F, summary, exc)
-            self._tx.put(raw)
+            raw = encode_response("rtu", 0, item.unit_id, resp, hit)
+            if hit is not None and hit.delay and self._loop is not None:
+                self._loop.call_later(hit.delay, self._send, raw, item.unit_id, resp, hit)
+            else:
+                self._send(raw, item.unit_id, resp, hit)
+
+    def _send(self, raw: bytes, unit_id: int, resp: bytes, hit=None) -> None:
+        if self._serial is None:
+            return
+        summary, exc = describe_response(resp)
+        self._emit("tx", raw, unit_id, resp[0] & 0x7F, summary, exc, fault=hit.info if hit is not None else None)
+        self._tx.put(raw)

@@ -172,6 +172,54 @@ Shell.addStrings("en", {
   "tpl.save.prompt": "Template name (letters, digits, _ . -)",
   "tpl.save.exists": "Template '{name}' already exists. Overwrite it?",
   "tpl.saved": "Template {name} saved to {path}",
+  "tab.faults": "Faults",
+  "menu.view.faults": "Faults",
+  "ft.dev": "Device",
+  "ft.nodev": "(select a device)",
+  "ft.q.timeout": "Timeout",
+  "ft.q.timeout.title": "Stop answering requests to the selected device (no response)",
+  "ft.q.exc04": "Exception 04",
+  "ft.q.exc04.title": "Answer every request to the selected device with exception 04 (server device failure)",
+  "ft.q.busy": "Busy 10 s",
+  "ft.q.busy.title": "Answer exception 06 (server device busy) for 10 seconds",
+  "ft.q.freeze": "Freeze values",
+  "ft.q.freeze.title": "Stop behaviors from updating the selected device's values (Modbus keeps answering)",
+  "ft.add": "Add rule…",
+  "ft.import": "Import preset…",
+  "ft.import.title": "Load a JSON / YAML preset file; it replaces the current rules",
+  "ft.export": "Export preset",
+  "ft.clear": "Clear all",
+  "ft.clear.confirm": "Delete all fault rules?",
+  "ft.empty": "No fault rules. Use the quick buttons for the selected device or add a rule.",
+  "ft.col.on": "On",
+  "ft.col.id": "Rule",
+  "ft.col.action": "Action",
+  "ft.col.scope": "Scope",
+  "ft.col.params": "Params",
+  "ft.col.gate": "Trigger",
+  "ft.col.count": "Hits",
+  "ft.delete": "Delete rule",
+  "ft.scope.all": "all requests",
+  "ft.every": "every {n}th",
+  "ft.remaining": "{n} left",
+  "ft.busy.left": "{s} s left",
+  "ft.any": "(any)",
+  "ft.f.listener": "Listener",
+  "ft.f.unit": "Unit",
+  "ft.f.fc": "FC",
+  "ft.f.start": "Address from",
+  "ft.f.end": "to",
+  "ft.f.action": "Action",
+  "ft.f.params": "Params (JSON)",
+  "ft.f.prob": "Probability",
+  "ft.f.every": "Every N",
+  "ft.f.remaining": "Count",
+  "ft.f.remaining.title": "Fire this many times, then disable the rule",
+  "ft.f.add": "Add",
+  "ft.params.bad": "Params must be a JSON object",
+  "ft.added": "Fault rule {id} added",
+  "ft.imported": "Fault preset loaded ({n} rules)",
+  "ft.cleared": "All fault rules deleted",
   "errdlg.close": "Close",
   "dlg.cancel": "Cancel",
   "dlg.apply": "Apply",
@@ -214,7 +262,8 @@ const S = {
   tr: [],               // buffered trace events (max MAX_TRACE)
   trPaused: false,
   trPending: [],
-  tab: ["traffic", "stats", "log"].includes(store.get("tab", "")) ? store.get("tab") : "traffic",
+  tab: ["traffic", "stats", "log", "faults"].includes(store.get("tab", "")) ? store.get("tab") : "traffic",
+  faults: [],           // fault rules (GET /api/faults, WS "faults")
   cfgApplied: null,
 };
 
@@ -294,6 +343,7 @@ function fmtValue(p) {
 // ------------------------------------------------------------------ snapshot / rendering
 
 function setSnapshot(snap) {
+  queueMicrotask(renderFaults);
   S.snap = snap;
   S.idx.clear();
   for (const d of snap.devices) for (const p of d.points) S.idx.set(`${d.name}|${p.name}`, p);
@@ -471,6 +521,7 @@ function applyChanges(msg) {
 }
 
 function selectDevice(name) {
+  queueMicrotask(renderFaults);   // quick fault buttons follow the selected device
   S.dev = name; store.set("device", name);
   S.editing = null;
   closeTrend();
@@ -599,7 +650,7 @@ function trFilter() {
   const u = $("trUnit").value.trim(), f = $("trFc").value.trim(), exc = $("trExc").checked;
   return (e) => (u === "" || e.unit_id === Number(u))
     && (f === "" || (e.function_code != null && (e.function_code & 0x7f) === Number(f)))
-    && (!exc || e.exception_code != null || !!e.error);
+    && (!exc || e.exception_code != null || !!e.error || !!e.fault);
 }
 
 function fmtTs(ts) {
@@ -614,7 +665,9 @@ function trRow(e) {
   const fc = e.function_code;
   const fcTitle = fc != null ? (FC_NAMES[fc & 0x7f] || "") : "";
   const excName = e.exception_code != null ? I18N.en[`exc.${hex2(e.exception_code)}`] ? t(`exc.${hex2(e.exception_code)}`) : "" : "";
-  const sum = [e.summary, excName && `(${excName})`, e.error].filter(Boolean).join(" ");
+  const flt = e.fault ? `⚡ ${e.fault.action} [${e.fault.rule}]` : "";
+  if (flt) tr.classList.add("fault");
+  const sum = [flt, e.summary, excName && `(${excName})`, e.error].filter(Boolean).join(" ");
   tr.innerHTML = `<td>${fmtTs(e.ts)}</td><td>${esc(e.listener_id)}</td><td>${esc(e.peer)}</td>
     <td class="${e.direction === "rx" ? "rx" : "tx"}">${e.direction === "rx" ? "rx →" : "← tx"}</td>
     <td class="num">${e.unit_id ?? ""}</td><td class="num" title="${esc(fcTitle)}">${fc != null ? `${fc} <small>(0x${hex2(fc)})</small>` : ""}</td>
@@ -730,7 +783,7 @@ function showTab(name) {
     b.classList.toggle("sel", b.dataset.tab === name);
     b.setAttribute("aria-selected", String(b.dataset.tab === name));
   });
-  for (const p of ["traffic", "stats", "log"]) $(`pane-${p}`).hidden = p !== name;
+  for (const p of ["traffic", "stats", "log", "faults"]) $(`pane-${p}`).hidden = p !== name;
   if (name === "stats") refreshStats().then(renderStats);
 }
 
@@ -840,6 +893,100 @@ async function saveAsTemplate(dev) {
   } catch (e) { toast(e.message); }
 }
 
+
+// ------------------------------------------------------------------ fault injection (design 5.4)
+
+const FAULT_ACTIONS = ["exception", "delay", "no_response", "disconnect", "corrupt_crc", "truncate",
+  "wrong_transaction_id", "wrong_unit_id", "busy", "freeze", "refuse_connections"];
+const FAULT_PARAM_HINT = { exception: '{"code": 4}', delay: '{"ms": 2000}  |  {"min_ms": 500, "max_ms": 3000}',
+  truncate: '{"bytes": 3}', busy: '{"seconds": 10}', wrong_unit_id: '{"unit": 99}' };
+
+function ftScope(r) {
+  const parts = [];
+  if (r.listener) parts.push(r.listener);
+  if (r.unit != null) parts.push(`${t("ft.f.unit")} ${r.unit}`);
+  if (r.function_codes?.length) parts.push(`FC ${r.function_codes.join(",")}`);
+  if (r.address_start != null || r.address_end != null) parts.push(`${r.address_start ?? 0}–${r.address_end ?? 65535}`);
+  return parts.join(" · ") || t("ft.scope.all");
+}
+
+function ftGate(r) {
+  const parts = [];
+  if (r.probability < 1) parts.push(`p=${r.probability}`);
+  if (r.every_n) parts.push(t("ft.every", { n: r.every_n }));
+  if (r.remaining != null) parts.push(t("ft.remaining", { n: r.remaining }));
+  return parts.join(" · ");
+}
+
+function renderFaults() {
+  const rules = S.faults;
+  $("ftBody").innerHTML = rules.map((r) => `<tr class="${r.enabled ? "" : "off"}${r.active ? " active" : ""}" data-id="${esc(r.id)}">
+    <td><input type="checkbox" class="fton"${r.enabled ? " checked" : ""} aria-label="${esc(t("ft.col.on"))}"></td>
+    <td>${esc(r.id)}${r.name ? ` <small>${esc(r.name)}</small>` : ""}</td>
+    <td>${esc(r.action)}${r.busy_remaining != null ? ` <small>${esc(t("ft.busy.left", { s: Math.ceil(r.busy_remaining) }))}</small>` : ""}</td>
+    <td>${esc(ftScope(r))}</td>
+    <td class="hex">${esc(Object.keys(r.params || {}).length ? JSON.stringify(r.params) : "")}</td>
+    <td>${esc(ftGate(r))}</td><td class="num">${r.triggers ?? 0}</td>
+    <td><button type="button" class="btn small ftdel" title="${esc(t("ft.delete"))}" aria-label="${esc(t("ft.delete"))}">×</button></td>
+  </tr>`).join("");
+  $("ftEmpty").hidden = rules.length > 0;
+  const n = rules.filter((r) => r.enabled).length;
+  $("ftCount").textContent = n ? `(${n})` : "";
+  const d = currentDevice();
+  $("ftDev").textContent = d ? `${d.name} (${t("ft.f.unit")} ${d.unit_id ?? d.unit ?? "?"})` : t("ft.nodev");
+  for (const id of ["ftqTimeout", "ftqExc", "ftqBusy", "ftqFreeze"]) $(id).disabled = !d;
+}
+
+async function loadFaults() {
+  try { S.faults = (await api("GET", "/api/faults")).rules || []; renderFaults(); } catch (e) { toast(e.message); }
+}
+
+async function ftCall(method, url, body, raw) {
+  try { const r = await api(method, url, body, raw); await loadFaults(); return r; } catch (e) { toast(e.message); return null; }
+}
+
+function quickFault(action, params, label) {
+  const d = currentDevice();
+  if (!d) return;
+  const ls = Array.isArray(d.listeners) ? d.listeners : [];
+  ftCall("POST", "/api/faults", { action, params, unit: d.unit_id ?? d.unit, listener: ls.length === 1 ? ls[0] : undefined,
+    name: `${d.name}: ${label}` }).then((r) => { if (r) Shell.toast(t("ft.added", { id: r.id }), "ok"); });
+}
+
+function openFaultForm() {
+  const ls = S.snap?.listeners || [];
+  $("ftListener").innerHTML = `<option value="">${esc(t("ft.any"))}</option>`
+    + ls.map((l) => `<option value="${esc(l.id)}">${esc(l.id)}</option>`).join("");
+  if (!$("ftAction").options.length) $("ftAction").innerHTML = FAULT_ACTIONS.map((a) => `<option>${a}</option>`).join("");
+  const d = currentDevice();
+  if (d && $("ftUnit").value === "") $("ftUnit").value = d.unit_id ?? d.unit ?? "";
+  $("ftParams").placeholder = FAULT_PARAM_HINT[$("ftAction").value] || "";
+  $("ftForm").hidden = false;
+}
+
+async function submitFault(ev) {
+  ev.preventDefault();
+  let params = {};
+  const ptxt = $("ftParams").value.trim();
+  if (ptxt) {
+    try { params = JSON.parse(ptxt); } catch { params = null; }
+    if (!params || typeof params !== "object" || Array.isArray(params)) { toast(t("ft.params.bad")); return; }
+  }
+  const num = (id) => ($(id).value.trim() === "" ? undefined : Number($(id).value));
+  const fcs = $("ftFcs").value.split(/[\s,]+/).filter(Boolean).map(Number);
+  const r = await ftCall("POST", "/api/faults", {
+    action: $("ftAction").value, params, listener: $("ftListener").value || undefined, unit: num("ftUnit"),
+    function_codes: fcs.length ? fcs : undefined, address_start: num("ftStart"), address_end: num("ftEnd"),
+    probability: num("ftProb") ?? 1, every_n: num("ftEvery"), remaining: num("ftRemain"),
+  });
+  if (r) { $("ftForm").hidden = true; Shell.toast(t("ft.added", { id: r.id }), "ok"); }
+}
+
+async function importFaults(file) {
+  const r = await ftCall("POST", "/api/faults/preset", await file.text(), true);
+  if (r) Shell.toast(t("ft.imported", { n: r.rules.length }), "ok");
+}
+
 // ------------------------------------------------------------------ shell
 
 Shell.init({
@@ -866,6 +1013,7 @@ Shell.init({
       { id: "view.traffic", label: "menu.view.traffic", onClick: () => showTab("traffic") },
       { id: "view.stats", label: "menu.view.stats", onClick: () => showTab("stats") },
       { id: "view.log", label: "menu.view.log", onClick: () => showTab("log") },
+      { id: "view.faults", label: "menu.view.faults", onClick: () => showTab("faults") },
       { id: "view.addr", label: "menu.view.addr", submenu: addrItems() },
       { separator: true },
       Shell.themeItem(),
@@ -890,7 +1038,7 @@ function setConn(on) {
 
 function connect() {
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
-  ws.onopen = () => setConn(true);
+  ws.onopen = () => { setConn(true); loadFaults(); };
   ws.onclose = () => { setConn(false); setTimeout(connect, 2000); };
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
@@ -898,6 +1046,7 @@ function connect() {
     else if (msg.type === "values") applyChanges(msg);
     else if (msg.type === "trace") addTrace(msg.events || []);
     else if (msg.type === "log") addLog(msg.event);
+    else if (msg.type === "faults") { S.faults = msg.rules || []; renderFaults(); }
     else if (msg.type === "simulation" && S.snap) {
       S.snap.running = msg.running; S.snap.time_scale = msg.time_scale; renderSim(S.snap);
     } else if (msg.type === "reload") connectReload();
@@ -918,6 +1067,31 @@ $("trPause").onclick = toggleTracePause;
 $("trClear").onclick = () => { S.tr = []; S.trPending = []; renderTraffic(); };
 $("trExport").onclick = exportTrace;
 $("statsRefresh").onclick = () => refreshStats().then(renderStats);
+$("ftqTimeout").onclick = () => quickFault("no_response", {}, t("ft.q.timeout"));
+$("ftqExc").onclick = () => quickFault("exception", { code: 4 }, t("ft.q.exc04"));
+$("ftqBusy").onclick = () => quickFault("busy", { seconds: 10 }, t("ft.q.busy"));
+$("ftqFreeze").onclick = () => quickFault("freeze", {}, t("ft.q.freeze"));
+$("ftAdd").onclick = openFaultForm;
+$("ftCancel").onclick = () => { $("ftForm").hidden = true; };
+$("ftForm").onsubmit = submitFault;
+$("ftAction").onchange = () => { $("ftParams").placeholder = FAULT_PARAM_HINT[$("ftAction").value] || ""; };
+$("ftImport").onclick = () => $("ftFile").click();
+$("ftFile").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importFaults(f); };
+$("ftExport").onclick = () => download("/api/faults/export");
+$("ftClear").onclick = () => {
+  if (!confirm(t("ft.clear.confirm"))) return;
+  ftCall("POST", "/api/faults/clear").then((r) => { if (r) Shell.toast(t("ft.cleared"), "ok"); });
+};
+$("ftBody").onclick = (e) => {
+  const tr = e.target.closest("tr");
+  if (tr && e.target.classList.contains("ftdel")) ftCall("DELETE", `/api/faults/${encodeURIComponent(tr.dataset.id)}`);
+};
+$("ftBody").onchange = (e) => {
+  const tr = e.target.closest("tr");
+  if (tr && e.target.classList.contains("fton")) {
+    ftCall("PUT", `/api/faults/${encodeURIComponent(tr.dataset.id)}`, { enabled: e.target.checked });
+  }
+};
 window.addEventListener("resize", drawTrend);
 window.addEventListener("shell:themechange", drawTrend);
 setInterval(refreshStats, 3000);   // listener client counts / per-FC counters are not pushed over /ws

@@ -59,3 +59,23 @@ points:                    # 与设备的 points: 相同的 schema
 设备标题栏中的 **另存为模板**（`POST /api/templates/from-device/{device}`，请求体 `{"name": ..., "overwrite": false}`）
 会把设备展开后的点作为模板文件写入该目录，例如在用 [Excel](excel.md) 导入厂商寄存器表之后。`GET /api/templates`
 为每个模板标注 `source`（`builtin` / `user`），用户模板还会给出文件 `path`。
+
+## SunSpec 模板
+
+`sunspec_pv_inverter` 与 `sunspec_meter` 是由公开的 SunSpec 模型定义（Apache-2.0，从
+[sunspec/models](https://github.com/sunspec/models) 提交 `90b4a331dcca1d6eac69c1bead952fddcc5852e0`
+原样收录）生成的模板，实现了 SunSpec Modbus 模型。与 SunSpec Alliance 无任何关联，未获其认可或认证。
+
+| 模板 | 模型 | 参数 |
+|---|---|---|
+| `sunspec_pv_inverter` | 1, 103, 120, 121, 122, 123, 160 | `rated_w`, `mppt_count`, `ac_voltage_v`, `frequency_hz`, `dc_voltage_v`, `serial_number`, `base_address` |
+| `sunspec_meter` | 1, 203 | `base_load_w`, `voltage_v`, `frequency_hz`, `pv_device`, `serial_number`, `base_address` |
+
+- 从 `base_address`（40000 / 0 / 50000）起在保持寄存器中依次放置 `SunS` 标识、各模型（`ID`、`L`、点）、
+  结束模型（`0xFFFF`、`L = 0`）。点名为 `m<id>_<Name>`（如 `m103_W`），重复组为 `m160_module1_DCW` 等。
+- 比例因子：数据类型 `sunspec_sf`（int16）与点字段 `scale_ref: <sf 点>`；工程值 = `raw x 10^sf`，
+  sf 在编码 / 解码时从被引用的点读取。
+- 未实现值（int16 / sunssf `0x8000`、uint16 `0xFFFF`、int32 `0x80000000`、uint32 `0xFFFFFFFF`、float32 NaN）
+  在 UI 与 API 中显示为 `null`（点字段 `nullable: true`）。无值的可选点视为未实现；累计量不会为 null。
+- 逆变器：`m103_W` 随日照曲线变化，`m123_WMaxLim_Ena = 1` 时受 `m123_WMaxLimPct` 限制，`m123_Conn = 0` 时为 0；
+  `m103_WH` 累计。电表：`m203_W` = 负荷曲线 − `pv_device` 的 `m103_W`（> 0 买电），`m203_TotWhImp` / `m203_TotWhExp` 累计。

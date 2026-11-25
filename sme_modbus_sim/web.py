@@ -3,16 +3,19 @@
 App factory, ``_bad()`` error mapping and the ``/ws`` snapshot/dedup loop follow sme-bac-sim
 ``sme_bacnet_sim/web.py`` @ ebd27ec.
 Excel import / export (design 5.6) and user-local template routes (design 5.3.1) are ModbusSim additions.
+Fault injection routes ``/api/faults*`` (design 5.4) are runtime state, never written to the YAML config.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+import yaml
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
@@ -202,6 +205,73 @@ def create_app(engine: Engine, config_path: Optional[str | Path] = None) -> Fast
     @app.get("/api/stats")
     async def stats():
         return engine.stats_snapshot()
+
+    # ---- fault injection (design 5.4)
+
+    async def json_object(request: Request) -> Dict[str, Any]:
+        try:
+            data = json.loads(await request.body() or b"{}")
+        except ValueError as e:
+            raise HTTPException(400, f"invalid JSON: {e}") from None
+        if not isinstance(data, dict):
+            raise HTTPException(400, "a fault rule is a JSON object")
+        return data
+
+    @app.get("/api/faults")
+    async def faults_list():
+        return {"rules": engine.faults.list()}
+
+    @app.post("/api/faults")
+    async def faults_create(request: Request):
+        try:
+            rule = engine.faults.add(await json_object(request))
+        except ValueError as e:
+            raise _bad(e) from None
+        engine.log_event("fault", f"fault rule {rule['id']} added ({rule['action']})")
+        return rule
+
+    @app.put("/api/faults/{rule_id}")
+    async def faults_update(rule_id: str, request: Request):
+        data = await json_object(request)
+        try:
+            return engine.faults.update(rule_id, data)
+        except KeyError as e:
+            raise HTTPException(404, str(e).strip("'\"")) from None
+        except ValueError as e:
+            raise _bad(e) from None
+
+    @app.delete("/api/faults/{rule_id}")
+    async def faults_delete(rule_id: str):
+        try:
+            engine.faults.delete(rule_id)
+        except KeyError as e:
+            raise HTTPException(404, str(e).strip("'\"")) from None
+        engine.log_event("fault", f"fault rule {rule_id} deleted")
+        return {"ok": True}
+
+    @app.post("/api/faults/clear")
+    async def faults_clear():
+        engine.faults.clear()
+        engine.log_event("fault", "all fault rules deleted")
+        return {"ok": True}
+
+    @app.post("/api/faults/preset")
+    async def faults_preset(request: Request, replace: bool = True):
+        text = (await request.body()).decode("utf-8")
+        try:
+            rules = engine.faults.load(yaml.safe_load(text) if text.strip() else [], replace=replace)
+        except yaml.YAMLError as e:
+            raise HTTPException(400, f"invalid YAML / JSON: {e}") from None
+        except ValueError as e:
+            raise _bad(e) from None
+        engine.log_event("fault", f"fault preset loaded ({len(rules)} rules)")
+        return {"rules": rules}
+
+    @app.get("/api/faults/export")
+    async def faults_export():
+        return Response(json.dumps(engine.faults.export(), indent=2, ensure_ascii=False) + "\n",
+                        media_type="application/json",
+                        headers={"Content-Disposition": 'attachment; filename="faults.json"'})
 
     # ---- live updates
 

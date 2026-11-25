@@ -44,4 +44,4 @@ version = { attr = "sme_modbus_sim.__version__" }
 include = ["sme_modbus_sim*"]
 
 [tool.setuptools.package-data]
-sme_modbus_sim = ["static/**/*"]
+sme_modbus_sim = ["static/**/*", "data/sunspec/*"]

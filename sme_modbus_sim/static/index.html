@@ -54,6 +54,7 @@
       <button type="button" class="tab sel" data-tab="traffic" role="tab"><span data-i18n="tab.traffic">Traffic</span> <span id="trCount" class="cnt"></span></button>
       <button type="button" class="tab" data-tab="stats" role="tab" data-i18n="tab.stats">Statistics</button>
       <button type="button" class="tab" data-tab="log" role="tab"><span data-i18n="tab.log">Event log</span> <span id="logCount" class="cnt"></span></button>
+      <button type="button" class="tab" data-tab="faults" role="tab"><span data-i18n="tab.faults">Faults</span> <span id="ftCount" class="cnt"></span></button>
       <span class="spacer"></span>
       <button type="button" class="btn small" id="bottomToggle" data-i18n-title="tab.collapse" data-i18n-aria-label="tab.collapse">▾</button>
     </div>
@@ -85,6 +86,46 @@
     </div>
     <div class="pane" id="pane-log" hidden>
       <ul id="log" class="log"></ul>
+    </div>
+    <div class="pane" id="pane-faults" hidden>
+      <div class="trtools">
+        <span class="hint"><span data-i18n="ft.dev">Device</span>: <b id="ftDev"></b></span>
+        <button type="button" class="btn small" id="ftqTimeout" data-i18n="ft.q.timeout" data-i18n-title="ft.q.timeout.title">Timeout</button>
+        <button type="button" class="btn small" id="ftqExc" data-i18n="ft.q.exc04" data-i18n-title="ft.q.exc04.title">Exception 04</button>
+        <button type="button" class="btn small" id="ftqBusy" data-i18n="ft.q.busy" data-i18n-title="ft.q.busy.title">Busy 10 s</button>
+        <button type="button" class="btn small" id="ftqFreeze" data-i18n="ft.q.freeze" data-i18n-title="ft.q.freeze.title">Freeze values</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn small" id="ftAdd" data-i18n="ft.add">Add rule…</button>
+        <button type="button" class="btn small" id="ftImport" data-i18n="ft.import" data-i18n-title="ft.import.title">Import preset…</button>
+        <button type="button" class="btn small" id="ftExport" data-i18n="ft.export">Export preset</button>
+        <button type="button" class="btn small" id="ftClear" data-i18n="ft.clear">Clear all</button>
+        <input type="file" id="ftFile" accept=".json,.yaml,.yml,application/json" hidden>
+      </div>
+      <form id="ftForm" class="ftform" hidden>
+        <label><span data-i18n="ft.f.listener">Listener</span> <select id="ftListener"></select></label>
+        <label><span data-i18n="ft.f.unit">Unit</span> <input id="ftUnit" type="number" min="0" max="255"></label>
+        <label><span data-i18n="ft.f.fc">FC</span> <input id="ftFcs" size="8" placeholder="3,4"></label>
+        <label><span data-i18n="ft.f.start">Address from</span> <input id="ftStart" type="number" min="0" max="65535"></label>
+        <label><span data-i18n="ft.f.end">to</span> <input id="ftEnd" type="number" min="0" max="65535"></label>
+        <label><span data-i18n="ft.f.action">Action</span> <select id="ftAction"></select></label>
+        <label class="wide"><span data-i18n="ft.f.params">Params (JSON)</span> <input id="ftParams" size="28"></label>
+        <label><span data-i18n="ft.f.prob">Probability</span> <input id="ftProb" type="number" min="0" max="1" step="0.05" value="1"></label>
+        <label><span data-i18n="ft.f.every">Every N</span> <input id="ftEvery" type="number" min="1"></label>
+        <label data-i18n-title="ft.f.remaining.title"><span data-i18n="ft.f.remaining">Count</span> <input id="ftRemain" type="number" min="1"></label>
+        <button type="submit" class="btn small primary" data-i18n="ft.f.add">Add</button>
+        <button type="button" class="btn small" id="ftCancel" data-i18n="dlg.cancel">Cancel</button>
+      </form>
+      <div class="trwrap">
+        <table class="traffic faults">
+          <thead><tr>
+            <th data-i18n="ft.col.on">On</th><th data-i18n="ft.col.id">Rule</th><th data-i18n="ft.col.action">Action</th>
+            <th data-i18n="ft.col.scope">Scope</th><th data-i18n="ft.col.params">Params</th>
+            <th data-i18n="ft.col.gate">Trigger</th><th class="num" data-i18n="ft.col.count">Hits</th><th></th>
+          </tr></thead>
+          <tbody id="ftBody"></tbody>
+        </table>
+        <p class="hint ftempty" id="ftEmpty" data-i18n="ft.empty">No fault rules.</p>
+      </div>
     </div>
   </section>
 </div>

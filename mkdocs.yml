@@ -73,6 +73,7 @@ nav:
       - configuration.md
       - behaviors-templates.md
       - excel.md
+      - faults.md
   - Reference:
       - http-api.md
       - changelog.md

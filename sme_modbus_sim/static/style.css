@@ -162,3 +162,16 @@ table.traffic { width: 100%; border-collapse: collapse; font-family: var(--mono)
 .errlist { max-height: 50vh; overflow: auto; margin: 0 0 8px; padding-left: 20px; }
 .errlist li { margin: 2px 0; }
 .devheader .tplsave { align-self: flex-start; }
+
+/* fault injection (design 5.4) */
+.traffic tr.fault td.sum { font-weight: 600; }
+.traffic tr.fault td:first-child { box-shadow: inset 2px 0 0 var(--warn); }
+.ftform { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 6px 18px; font-size: 12px;
+  border-bottom: 1px solid var(--line, rgba(127,127,127,.25)); }
+.ftform label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.ftform input[type=number] { width: 72px; }
+.faults tr.off td { opacity: .55; }
+.faults tr.active td:first-child { box-shadow: inset 2px 0 0 var(--warn); }
+.faults .ftdel { padding: 0 6px; }
+.ftempty { padding: 8px 18px; }
+.ftempty[hidden] { display: none; }

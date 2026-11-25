@@ -37,6 +37,7 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 from . import __version__
 from .behaviors import Behavior, ident, make_behavior
 from .config import BIT_TABLES, DeviceConfig, PointConfig, SimConfig, dump_yaml, register_count
+from .faults import FaultManager
 from .protocol import datatypes as dtypes
 from .protocol.constants import ExceptionCode
 from .protocol.errors import ModbusError
@@ -53,6 +54,9 @@ QUEUE_SIZE = 1000
 WRAPPING_BEHAVIORS = ("counter", "pulse")
 INT_TYPES = ("uint16", "int16", "uint32", "int32", "uint64", "int64")
 FLOAT_TYPES = ("float32", "float64")
+# SunSpec "not implemented" raw values (as decoded with scale 1); float types use NaN
+NA_RAW = {"int16": -0x8000, "uint16": 0xFFFF, "int32": -0x80000000, "uint32": 0xFFFFFFFF,
+          "int64": -0x8000000000000000, "uint64": 0xFFFFFFFFFFFFFFFF}
 
 
 class PointRuntime:
@@ -67,10 +71,11 @@ class PointRuntime:
         self.address: int = cfg.address  # type: ignore[assignment]
         self.n = register_count(cfg)
         self.datatype: str = cfg.datatype or "uint16"
-        self.enc_dt = "uint16" if self.datatype == "enum" else self.datatype
+        self.enc_dt = {"enum": "uint16", "sunspec_sf": "int16"}.get(self.datatype, self.datatype)
+        self.nullable = bool(cfg.nullable) or self.datatype == "sunspec_sf"
         self.byte_order = cfg.byte_order or dev.cfg.byte_order
         self.word_order = cfg.word_order or dev.cfg.word_order
-        self.scale = 1.0 if self.datatype == "enum" else cfg.scale
+        self._scale = 1.0 if self.datatype in ("enum", "sunspec_sf") else cfg.scale
         self.offset = 0.0 if self.datatype == "enum" else cfg.offset
         self.access = cfg.access or ("rw" if self.table in ("coil", "holding") else "r")
         self.error: Optional[str] = None
@@ -85,6 +90,22 @@ class PointRuntime:
         self.value: Any = None
 
     # ------------------------------------------------------------ conversion
+    @property
+    def scale(self) -> float:
+        """``scale`` x 10^sf when ``scale_ref`` names a ``sunspec_sf`` point holding an implemented value."""
+        ref = self.cfg.scale_ref
+        if ref:
+            sf_point = self.dev.by_name.get(ref) if hasattr(self.dev, "by_name") else None
+            sf = sf_point.value if sf_point is not None else None
+            if isinstance(sf, int) and not isinstance(sf, bool):
+                return self._scale * (10 ** sf if sf >= 0 else 10.0 ** sf)
+        return self._scale
+
+    def _na_words(self) -> List[int]:
+        if self.enc_dt in INT_TYPES:
+            return dtypes.encode(NA_RAW[self.enc_dt], self.enc_dt, self.byte_order, self.word_order)
+        return dtypes.encode(math.nan, self.enc_dt, self.byte_order, self.word_order)
+
     def _coerce_label(self, v: Any) -> Any:
         if isinstance(v, str) and self.cfg.labels:
             for k, label in self.cfg.labels.items():
@@ -114,6 +135,8 @@ class PointRuntime:
                     raise ValueError(f"string longer than {2 * self.n} characters")
                 s = s[: 2 * self.n]
             return s
+        if v is None and self.nullable:
+            return None  # "not implemented"
         v = self._coerce_label(v)
         if isinstance(v, str):
             v = float(v)
@@ -151,6 +174,8 @@ class PointRuntime:
         return int(v) if self._exact(v) else round((float(v) - self.offset) / self.scale)
 
     def to_words(self, v: Any) -> List[int]:
+        if v is None and self.nullable:
+            return self._na_words()
         if self.enc_dt in INT_TYPES:
             raw = self._raw(v)
             return dtypes.encode(raw, self.enc_dt, self.byte_order, self.word_order)
@@ -162,9 +187,13 @@ class PointRuntime:
             return dtypes.get_bit(words[0], self.cfg.bit)  # type: ignore[arg-type]
         if self.datatype == "bool":
             return bool(words[0])
+        if self.nullable:
+            raw = dtypes.decode(words, self.enc_dt, self.byte_order, self.word_order, count=self.n)
+            if (raw == NA_RAW[self.enc_dt]) if self.enc_dt in INT_TYPES else (raw != raw):
+                return None  # "not implemented"
         v = dtypes.decode(words, self.enc_dt, self.byte_order, self.word_order, self.scale, self.offset,
                           count=self.n)
-        return int(v) if self.datatype == "enum" else v
+        return int(v) if self.datatype in ("enum", "sunspec_sf") else v
 
     # --------------------------------------------------------------- store
     @property
@@ -204,6 +233,7 @@ class PointRuntime:
         return {"name": c.name, "description": c.description, "table": self.table, "address": self.address,
                 "registers": self.n, "datatype": self.datatype, "count": c.count, "bit": c.bit,
                 "byte_order": self.byte_order, "word_order": self.word_order, "scale": c.scale,
+                "scale_ref": c.scale_ref, "nullable": self.nullable,
                 "offset": c.offset, "units": c.units, "access": self.access, "min": c.min, "max": c.max,
                 "labels": c.labels, "behavior": self.behavior_type, **self.status()}
 
@@ -253,8 +283,9 @@ class DeviceRuntime:
                 bit_regs[k] = bit_regs.get(k, False) or (p.access == "rw" and p.table == "holding")
         for (table, addr), writable in bit_regs.items():
             self.store.define(table, addr, 1, writable=writable)
-        for p in self.points:
-            default = "" if p.datatype == "string" else 0
+        # sunspec_sf points first: points with scale_ref encode with the sf value
+        for p in sorted(self.points, key=lambda q: q.datatype != "sunspec_sf"):
+            default = "" if p.datatype == "string" else (None if p.nullable else 0)
             try:
                 p.set_value(p.cfg.value if p.cfg.value is not None else default)
             except Exception as e:
@@ -354,6 +385,7 @@ class Engine:
         self._scan: Optional[asyncio.Event] = None
         self._lock: Optional[asyncio.Lock] = None
         self._stopping = False
+        self.faults = FaultManager(self.publish)  # runtime fault rules (design 5.4), survive reloads
         self._build(config)
         self.config_text = config_text if config_text is not None else dump_yaml(config)
 
@@ -388,6 +420,8 @@ class Engine:
                 default_unit=lc.default_unit, trace=self._on_trace, listener_id=lc.id,
                 unknown_unit=lc.unknown_unit, all_units=lambda u=units: list(u.values()))
             self.stats.setdefault(lc.id, ListenerStats())
+        for srv in servers.values():
+            srv.faults = self.faults
         return servers
 
     async def _start_servers(self, servers: Dict[str, Any]) -> None:
@@ -593,6 +627,8 @@ class Engine:
         self.sim_time += dt
         base = {"t": self.sim_time, "dt": dt, "hour": self.sim_hour, "pv": self._pv}
         for dev in self.devices.values():
+            if self.faults.is_frozen(dev.cfg.unit_id, dev.listeners):
+                continue  # fault "freeze": values hold, protocol still served
             names = dict(base)
             names.update({p.ident: p.value for p in dev.points})
             for p in dev.points:

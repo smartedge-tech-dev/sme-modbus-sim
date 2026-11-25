@@ -65,3 +65,27 @@ it works in numeric fields. Write literal braces as `{{` and `}}`.
 `{"name": ..., "overwrite": false}`) writes the device's expanded points as a template file into this directory,
 for example after importing a vendor register map from [Excel](excel.md). `GET /api/templates` marks each template
 with `source` (`builtin` / `user`) and, for user templates, the file `path`.
+
+## SunSpec templates
+
+`sunspec_pv_inverter` and `sunspec_meter` are templates generated from the public SunSpec model definitions
+(Apache-2.0, vendored unmodified from [sunspec/models](https://github.com/sunspec/models) at commit
+`90b4a331dcca1d6eac69c1bead952fddcc5852e0`); they implement SunSpec Modbus models.
+Not affiliated with, endorsed by, or certified by SunSpec Alliance.
+
+| Template | Models | Params |
+|---|---|---|
+| `sunspec_pv_inverter` | 1, 103, 120, 121, 122, 123, 160 | `rated_w`, `mppt_count`, `ac_voltage_v`, `frequency_hz`, `dc_voltage_v`, `serial_number`, `base_address` |
+| `sunspec_meter` | 1, 203 | `base_load_w`, `voltage_v`, `frequency_hz`, `pv_device`, `serial_number`, `base_address` |
+
+- Holding registers from `base_address` (40000, 0 or 50000): `SunS` marker, each model (`ID`, `L`, points),
+  end model (`0xFFFF`, `L = 0`). Point names are `m<id>_<Name>` (e.g. `m103_W`); repeating groups are
+  `m160_module1_DCW`, ...
+- Scale factors: datatype `sunspec_sf` (int16) and point field `scale_ref: <sf point>`; the engineering value is
+  `raw x 10^sf`, with the sf read from the referenced point at encode / decode time.
+- Not implemented values (`0x8000` int16 / sunssf, `0xFFFF` uint16, `0x80000000` int32, `0xFFFFFFFF` uint32,
+  NaN float32) appear as `null` in the UI and API (point field `nullable: true`). Optional model points without a
+  value are left not implemented; accumulators are never null.
+- Inverter: `m103_W` follows a daylight curve, capped by `m123_WMaxLimPct` when `m123_WMaxLim_Ena = 1`, and 0 when
+  `m123_Conn = 0`; `m103_WH` accumulates; `m103_St` = OFF / SLEEPING / MPPT. Meter: `m203_W` = load profile minus
+  `pv_device`'s `m103_W` (> 0 import), `m203_TotWhImp` / `m203_TotWhExp` accumulate.

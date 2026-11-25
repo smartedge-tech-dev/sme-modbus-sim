@@ -32,3 +32,17 @@ curl -X POST http://127.0.0.1:8080/api/devices/PCS-1/points/p_setpoint/write \
 | `POST` | `/api/config/import` | ブックをインポート（マルチパート `file`）。エラー時 `400` とエラー一覧 |
 | `POST` | `/api/templates/reload` | ユーザーテンプレートディレクトリを再読込。`loaded` とファイルごとの `errors` を返す |
 | `POST` | `/api/templates/from-device/{device}` | デバイスの展開済みポイントをユーザーテンプレートとして保存（`{"name", "overwrite"}`）。既存なら `409` |
+
+## 故障注入
+
+| メソッド | パス | 説明 |
+|---|---|---|
+| `GET` | `/api/faults` | ルール一覧 `{"rules": [...]}`（`triggers`・`matches`・`active` 付き） |
+| `POST` | `/api/faults` | ルールを作成（JSON）。`id` 付きで返す |
+| `PUT` | `/api/faults/{id}` | ルールを更新。省略した項目は元の値のまま |
+| `DELETE` | `/api/faults/{id}` | ルールを削除 |
+| `POST` | `/api/faults/clear` | 全ルールを削除 |
+| `POST` | `/api/faults/preset` | YAML / JSON プリセット（本文）を読み込み、全ルールを置換。`?replace=false` で追加 |
+| `GET` | `/api/faults/export` | ルールを `faults.json` で返す |
+
+変更は `/ws` に `{"type": "faults", "rules": [...]}` として配信されます。[故障注入](faults.md) を参照。

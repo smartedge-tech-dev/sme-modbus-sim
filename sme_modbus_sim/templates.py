@@ -223,6 +223,155 @@ def _custom(p):
     return []
 
 
+# ---------------------------------------------------------------- SunSpec templates
+#
+# Generated from the public SunSpec model definitions (Apache-2.0), see ``sunspec.py``. Implements SunSpec
+# Modbus models; not affiliated with, endorsed by, or certified by SunSpec Alliance.
+
+SUNSPEC_NOTE = ("Generated from the public SunSpec model definitions (Apache-2.0); implements SunSpec Modbus "
+                "models. Not affiliated with, endorsed by, or certified by SunSpec Alliance.")
+
+
+def _sunspec_common(model: str, serial: Any) -> Dict[str, Any]:
+    from . import __version__
+
+    return {"m1_Mn": "SmartEdge", "m1_Md": model, "m1_Vr": __version__, "m1_SN": str(serial), "m1_DA": 1}
+
+
+def _expr(e: str) -> Dict[str, Any]:
+    return {"behavior": {"type": "expr", "expr": e}}
+
+
+def _walk(center: float, rel: float, step: float) -> Dict[str, Any]:
+    return {"behavior": {"type": "random_walk", "min": center * (1 - rel), "max": center * (1 + rel),
+                         "step": step}}
+
+
+def _counter(rate: str) -> Dict[str, Any]:
+    return {"behavior": {"type": "counter", "rate": rate}}
+
+
+@template("sunspec_pv_inverter", "SunSpec PV inverter (models 1, 103, 120-123, 160)",
+          {"rated_w": 10000, "mppt_count": 2, "ac_voltage_v": 230, "frequency_hz": 50, "dc_voltage_v": 600,
+           "serial_number": "SIM-PV-0001", "base_address": 40000})
+def _sunspec_pv_inverter(p):
+    from . import sunspec as ss
+
+    rated, vac, hz = _num(p, "rated_w"), _num(p, "ac_voltage_v"), _num(p, "frequency_hz")
+    vdc = _num(p, "dc_voltage_v")
+    n = max(1, int(p["mppt_count"]))
+    w_sf = ss.sf_for(rated * 1.3)
+    a_rtg = rated / (3 * vac)
+    a_sf = ss.sf_for(a_rtg * 1.3, 65535, -2)
+    dca_sf = ss.sf_for(rated / vdc * 1.3, 65535, -2)
+    vals: Dict[str, Any] = {
+        **_sunspec_common("SME-SIM-PV", p["serial_number"]),
+        # 103 three-phase inverter
+        "m103_A_SF": a_sf, "m103_V_SF": -1, "m103_W_SF": w_sf, "m103_Hz_SF": -2, "m103_VA_SF": w_sf,
+        "m103_VAr_SF": w_sf, "m103_PF_SF": -1, "m103_WH_SF": 0, "m103_DCA_SF": dca_sf, "m103_DCV_SF": -1,
+        "m103_DCW_SF": w_sf, "m103_Tmp_SF": -1, "m103_PhVphA": vac, "m103_PhVphB": vac, "m103_PhVphC": vac,
+        "m103_Hz": hz, "m103_PF": 100, "m103_TmpCab": 25, "m103_St": 2, "m103_Evt1": 0, "m103_DCV": vdc,
+        # 120 nameplate
+        "m120_DERTyp": 4, "m120_WRtg": rated, "m120_WRtg_SF": w_sf, "m120_VARtg": rated, "m120_VARtg_SF": w_sf,
+        "m120_VArRtgQ1": rated * 0.44, "m120_VArRtgQ2": rated * 0.44, "m120_VArRtgQ3": -rated * 0.44,
+        "m120_VArRtgQ4": -rated * 0.44, "m120_VArRtg_SF": w_sf, "m120_ARtg": a_rtg, "m120_ARtg_SF": a_sf,
+        "m120_PFRtgQ1": 0.8, "m120_PFRtgQ2": 0.8, "m120_PFRtgQ3": -0.8, "m120_PFRtgQ4": -0.8,
+        "m120_PFRtg_SF": -2,
+        # 121 basic settings
+        "m121_WMax": rated, "m121_WMax_SF": w_sf, "m121_VRef": vac, "m121_VRef_SF": 0, "m121_VRefOfs": 0,
+        "m121_VRefOfs_SF": 0,
+        # 122 measurements / status
+        "m122_PVConn": 3, "m122_StorConn": 0, "m122_ECPConn": 1, "m122_ActWh": 0,
+        # 123 immediate controls
+        "m123_Conn": 1, "m123_WMaxLimPct": 100, "m123_WMaxLimPct_SF": 0, "m123_WMaxLim_Ena": 0,
+        "m123_OutPFSet": 1, "m123_OutPFSet_SF": -3, "m123_OutPFSet_Ena": 0,
+        # 160 MPPT
+        "m160_DCA_SF": dca_sf, "m160_DCV_SF": -1, "m160_DCW_SF": w_sf, "m160_DCWH_SF": 0, "m160_Evt": 0, "m160_N": n,
+    }
+    cap = f"({rated} * (m123_WMaxLimPct / 100 if m123_WMaxLim_Ena == 1 else 1))"
+    daylight = f"{rated} * max(0, sin(pi * (hour - 6) / 12))"
+    ov: Dict[str, Dict[str, Any]] = {
+        "m103_W": _expr(f"0 if m123_Conn != 1 else max(0, min({daylight} * (1 + noise(0.02)), {cap}))"),
+        "m103_WH": _counter("max(m103_W, 0) / 3600"),
+        "m103_Hz": _walk(hz, 0.001, 0.005),
+        "m103_PF": _expr("(abs(m123_OutPFSet) if m123_OutPFSet_Ena == 1 else 1) * 100"),
+        "m103_VA": _expr("abs(m103_W) / max(abs(m103_PF) / 100, 0.01)"),
+        "m103_VAr": _expr("sqrt(max(m103_VA ** 2 - m103_W ** 2, 0))"),
+        "m103_A": _expr("m103_W / max((m103_PhVphA + m103_PhVphB + m103_PhVphC) / 3, 1)"),
+        "m103_DCW": _expr("m103_W / 0.97"),
+        "m103_DCV": _walk(vdc, 0.02, vdc * 0.002),
+        "m103_DCA": _expr("m103_DCW / max(m103_DCV, 1)"),
+        "m103_TmpCab": {"behavior": {"type": "follow", "target": f"25 + m103_W / {rated} * 20", "tau": 600}},
+        "m103_St": _expr("1 if m123_Conn != 1 else (4 if m103_W > 0 else 2)"),
+        "m122_PVConn": _expr("(7 if m103_W > 0 else 3) if m123_Conn == 1 else 2"),
+        "m122_ECPConn": _expr("int(m123_Conn == 1)"),
+        "m122_ActWh": _counter("max(m103_W, 0) / 3600"),
+        "m123_Conn": {"min": 0, "max": 1},
+        "m123_WMaxLimPct": {"min": 0, "max": 100},
+        "m123_WMaxLim_Ena": {"min": 0, "max": 1},
+        "m123_OutPFSet": {"min": -1, "max": 1},
+    }
+    for ph, pair in (("A", "AB"), ("B", "BC"), ("C", "CA")):
+        ov[f"m103_PhVph{ph}"] = _walk(vac, 0.02, vac * 0.001)
+        ov[f"m103_Aph{ph}"] = _expr(f"m103_W / 3 / max(m103_PhVph{ph}, 1)")
+        ov[f"m103_PPVph{pair}"] = _expr(f"(m103_PhVph{pair[0]} + m103_PhVph{pair[1]}) / 2 * sqrt(3)")
+    for i in range(1, n + 1):
+        m = f"m160_module{i}_"
+        vals.update({f"{m}ID": i, f"{m}IDStr": f"MPPT{i}", f"{m}DCV": vdc, f"{m}DCSt": 2, f"{m}DCEvt": 0,
+                     f"{m}Tmp": 25})
+        ov.update({f"{m}DCW": _expr(f"m103_DCW / {n}"), f"{m}DCV": _walk(vdc, 0.03, vdc * 0.002),
+                   f"{m}DCA": _expr(f"{m}DCW / max({m}DCV, 1)"), f"{m}DCWH": _counter(f"{m}DCW / 3600"),
+                   f"{m}DCSt": _expr("m103_St"), f"{m}Tmp": _expr("round(m103_TmpCab)")})
+    return ss.build_points([1, 103, 120, 121, 122, 123, 160], int(p["base_address"]), vals, ov,
+                           {160: {"module": n}})
+
+
+@template("sunspec_meter", "SunSpec three-phase meter (models 1, 203)",
+          {"base_load_w": 5000, "voltage_v": 230, "frequency_hz": 50, "pv_device": "",
+           "serial_number": "SIM-MTR-0001", "base_address": 40000})
+def _sunspec_meter(p):
+    from . import sunspec as ss
+
+    load, v, hz = _num(p, "base_load_w"), _num(p, "voltage_v"), _num(p, "frequency_hz")
+    pv = _ref(p.get("pv_device"), "m103_W", "0")
+    w_sf = ss.sf_for(load * 3)
+    a_sf = ss.sf_for(load * 3 / v, 32767, -2)
+    vals: Dict[str, Any] = {
+        **_sunspec_common("SME-SIM-METER", p["serial_number"]),
+        "m203_A_SF": a_sf, "m203_V_SF": -1, "m203_Hz_SF": -2, "m203_W_SF": w_sf, "m203_VA_SF": w_sf,
+        "m203_VAR_SF": w_sf, "m203_PF_SF": -1, "m203_TotWh_SF": 0, "m203_Hz": hz, "m203_PF": 100,
+        "m203_Evt": 0, "m203_TotWhImp": 0, "m203_TotWhExp": 0,
+    }
+    # grid point flow: load (daily profile) - PV output; > 0 = import
+    flow = f"{load} * (1 + 0.3 * sin(2 * pi * (hour - 8) / 24)) + noise({load * 0.02}) - ({pv})"
+    ov: Dict[str, Dict[str, Any]] = {
+        "m203_PhV": _expr("(m203_PhVphA + m203_PhVphB + m203_PhVphC) / 3"),
+        "m203_PPV": _expr("m203_PhV * sqrt(3)"),
+        "m203_Hz": _walk(hz, 0.001, 0.005),
+        "m203_W": _expr(flow),
+        "m203_VAR": _expr("m203_W * 0.2"),
+        "m203_VA": _expr("sqrt(m203_W ** 2 + m203_VAR ** 2)"),
+        "m203_PF": _expr("100 * abs(m203_W) / max(m203_VA, 1e-9)"),
+        "m203_A": _expr("m203_VA / max(m203_PhV, 1)"),
+        "m203_TotWhImp": _counter("max(m203_W, 0) / 3600"),
+        "m203_TotWhExp": _counter("max(-m203_W, 0) / 3600"),
+    }
+    for ph, pair in (("A", "AB"), ("B", "BC"), ("C", "CA")):
+        vals[f"m203_PhVph{ph}"] = v
+        ov[f"m203_PhVph{ph}"] = _walk(v, 0.02, v * 0.001)
+        ov[f"m203_PhVph{pair}"] = _expr(f"(m203_PhVph{pair[0]} + m203_PhVph{pair[1]}) / 2 * sqrt(3)")
+        ov[f"m203_Wph{ph}"] = _expr("m203_W / 3")
+        ov[f"m203_VARph{ph}"] = _expr("m203_VAR / 3")
+        ov[f"m203_VAph{ph}"] = _expr("m203_VA / 3")
+        ov[f"m203_PFph{ph}"] = _expr("m203_PF")
+        ov[f"m203_Aph{ph}"] = _expr(f"m203_VA / 3 / max(m203_PhVph{ph}, 1)")
+    return ss.build_points([1, 203], int(p["base_address"]), vals, ov)
+
+
+for _name in ("sunspec_pv_inverter", "sunspec_meter"):
+    TEMPLATES[_name]["description"] = SUNSPEC_NOTE
+
+
 def allocate_addresses(points: List[PointConfig]) -> List[PointConfig]:
     """Give points without an address the next free address of their table.
 

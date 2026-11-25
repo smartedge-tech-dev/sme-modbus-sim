@@ -34,7 +34,8 @@ def _check_exprs(points):
 
 def test_catalog():
     names = [t["name"] for t in template_catalog()]
-    assert names == ["battery_pcs", "bms", "power_meter", "env_sensor", "custom"]
+    assert names == ["battery_pcs", "bms", "power_meter", "env_sensor", "custom",
+                     "sunspec_pv_inverter", "sunspec_meter"]
 
 
 @pytest.mark.parametrize("name", list(TEMPLATES))
@@ -157,7 +158,8 @@ points:
     assert [p.name for p in expand_device(_dev(template="custom"))] == ["x"]
     assert parse_text("devices: [{name: D, unit_id: 1, template: inv}]").devices[0].template == "inv"
     tplmod.clear_user_templates()
-    assert [t["name"] for t in template_catalog()] == ["battery_pcs", "bms", "power_meter", "env_sensor", "custom"]
+    assert [t["name"] for t in template_catalog()] == ["battery_pcs", "bms", "power_meter", "env_sensor", "custom",
+                     "sunspec_pv_inverter", "sunspec_meter"]
     with pytest.raises(ValueError, match="unknown template"):
         expand_device(_dev(template="inv"))
 
@@ -181,3 +183,13 @@ def test_device_as_template_round_trip(user_dir):
     assert all(p.byte_order == "little" for p in saved)
     with pytest.raises(ValueError, match="invalid template name"):
         tplmod.device_as_template(dev, "a b")
+
+
+def test_sunspec_templates_registered_and_expand():
+    from sme_modbus_sim.config import DeviceConfig
+    from sme_modbus_sim.templates import TEMPLATES, expand_device
+
+    for name in ("sunspec_pv_inverter", "sunspec_meter"):
+        assert name in TEMPLATES
+        pts = expand_device(DeviceConfig(name="d", unit_id=1, template=name))
+        assert pts[0].name == "SunS" and pts[0].address == 40000 and pts[-1].name == "end_L"

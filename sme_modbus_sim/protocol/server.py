@@ -13,6 +13,11 @@ Unit id routing:
     units returned by ``all_units``; no response is sent. Non-write broadcasts are ignored.
 
 Each connection handles its requests sequentially; many connections run concurrently.
+
+Fault injection (design 5.4): when ``faults`` (a ``sme_modbus_sim.faults.FaultManager``) is set,
+every request frame is evaluated once before execution; exception / busy / no_response /
+disconnect replace the execution, the other actions alter the encoded response
+(``encode_response``). ``refuse_connections`` closes new connections in the accept path.
 """
 from __future__ import annotations
 
@@ -45,6 +50,24 @@ class TraceEvent:
     summary: str
     exception_code: int | None = None
     error: str | None = None
+    fault: dict | None = None  # {"rule": id, "action": name} when a fault rule fired
+
+
+def encode_response(framer: str, transaction_id: int, unit_id: int, resp: bytes, hit=None) -> bytes:
+    """Encode a response ADU, applying the frame-level fault actions of ``hit``."""
+    action = hit.action if hit is not None else None
+    if action == "wrong_unit_id":
+        unit_id = hit.unit if hit.unit is not None else (unit_id + 1) & 0xFF
+    if framer == "tcp":
+        tid = (transaction_id + 1) & 0xFFFF if action == "wrong_transaction_id" else transaction_id
+        raw = MbapFramer.build(tid, unit_id, resp)
+    else:
+        raw = RtuFramer.build(unit_id, resp)
+        if action == "corrupt_crc":
+            raw = raw[:-2] + bytes(b ^ 0xFF for b in raw[-2:])
+    if action == "truncate":
+        raw = raw[:hit.nbytes if hit.nbytes is not None else 3]
+    return raw
 
 
 Resolver = Callable[[int], "UnitStore | None"]
@@ -66,6 +89,7 @@ class ModbusTcpServer:
         unknown_unit: str = "ignore",
         all_units: Callable[[], Iterable[UnitStore]] | None = None,
         pdu_handler: PduHandler = handle_pdu,
+        faults=None,
     ) -> None:
         if framer not in FRAMERS:
             raise ValueError(f"invalid framer: {framer!r}")
@@ -86,6 +110,7 @@ class ModbusTcpServer:
         self.unknown_unit = unknown_unit
         self.all_units = all_units
         self.pdu_handler = pdu_handler
+        self.faults = faults
         self._server: asyncio.base_events.Server | None = None
         self._writers: set[asyncio.StreamWriter] = set()
         self._tasks: set[asyncio.Task] = set()
@@ -131,11 +156,11 @@ class ModbusTcpServer:
 
     # ---------------------------------------------------------------- trace
     def _emit(self, peer: str, direction: str, raw: bytes, unit_id, fc, summary: str,
-              exception_code: int | None = None, error: str | None = None) -> None:
+              exception_code: int | None = None, error: str | None = None, fault: dict | None = None) -> None:
         if self.trace is None:
             return
         ev = TraceEvent(time.time(), self.listener_id, peer, direction, raw.hex(" "),
-                        unit_id, fc, summary, exception_code, error)
+                        unit_id, fc, summary, exception_code, error, fault)
         with contextlib.suppress(Exception):
             self.trace(ev)
 
@@ -167,12 +192,19 @@ class ModbusTcpServer:
 
     # ----------------------------------------------------------- connection
     async def _on_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        peername = writer.get_extra_info("peername")
+        peer = f"{peername[0]}:{peername[1]}" if peername else "?"
+        hit = self.faults.refuse(self.listener_id) if self.faults is not None else None
+        if hit is not None:
+            self._emit(peer, "rx", b"", None, None, "connection refused", error="connection refused (fault)",
+                       fault=hit.info)
+            with contextlib.suppress(Exception):
+                writer.close()
+            return
         task = asyncio.current_task()
         if task is not None:
             self._tasks.add(task)
         self._writers.add(writer)
-        peername = writer.get_extra_info("peername")
-        peer = f"{peername[0]}:{peername[1]}" if peername else "?"
         framer = MbapFramer() if self.framer == "tcp" else RtuFramer()
         try:
             while True:
@@ -210,16 +242,26 @@ class ModbusTcpServer:
                     return False
                 continue
             fc = item.pdu[0] if item.pdu else None
-            self._emit(peer, "rx", item.raw, item.unit_id, fc, describe_request(item.pdu))
-            resp = self.process_frame(item)
+            hit = None
+            if self.faults is not None and item.pdu and not (self.framer == "rtu_over_tcp" and item.unit_id == 0):
+                hit = self.faults.evaluate(self.listener_id, self.framer, item.unit_id, item.pdu)
+            finfo = hit.info if hit is not None else None
+            self._emit(peer, "rx", item.raw, item.unit_id, fc, describe_request(item.pdu), fault=finfo)
+            if hit is not None and hit.action == "disconnect":
+                return False
+            if hit is not None and hit.action == "no_response":
+                continue
+            if hit is not None and hit.code is not None:
+                resp = exception_response(fc, hit.code)
+            else:
+                resp = self.process_frame(item)
             if resp is None:
                 continue
-            if isinstance(framer, MbapFramer):
-                raw = MbapFramer.build(item.transaction_id or 0, item.unit_id, resp)
-            else:
-                raw = RtuFramer.build(item.unit_id, resp)
+            raw = encode_response(self.framer, item.transaction_id or 0, item.unit_id, resp, hit)
+            if hit is not None and hit.delay:
+                await asyncio.sleep(hit.delay)
             summary, exc = describe_response(resp)
-            self._emit(peer, "tx", raw, item.unit_id, resp[0] & 0x7F, summary, exc)
+            self._emit(peer, "tx", raw, item.unit_id, resp[0] & 0x7F, summary, exc, fault=finfo)
             writer.write(raw)
             await writer.drain()
         return True

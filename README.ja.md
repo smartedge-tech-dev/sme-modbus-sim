@@ -93,7 +93,7 @@ client.close()
   FC 2B/0E 機器識別読み出し、障害注入 UI（遅延、応答破棄、例外、CRC 不正）、Excel ポイント一覧の入出力、
   ユーザーローカルテンプレート、公開されている SunSpec モデル定義から生成したテンプレート。
 
-> SunSpec Alliance とは提携・推奨・認証の関係にありません。SunSpec テンプレートは 0.2.0 で提供予定です。
+> SunSpec Alliance とは提携・推奨・認証の関係にありません。SunSpec テンプレート：`sunspec_pv_inverter`（モデル 1, 103, 120–123, 160）と `sunspec_meter`（モデル 1, 203）。公開されている SunSpec モデル定義（Apache-2.0）から生成しています。
 
 ## 商用サポート・カスタム開発
 

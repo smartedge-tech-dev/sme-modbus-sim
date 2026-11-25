@@ -185,3 +185,25 @@ def test_fc16_fc17_go_through_engine_validators():
     assert rw(0, [101]) == bytes([0x97, 0x03])                   # > max
     assert rw(2, [0, 9]) == bytes([0x17, 8, 0, 3, 0, 1, 0, 0, 0, 9])
     assert e.devices["D"].by_name["big"].value == 9
+
+
+def test_scale_ref_and_not_implemented_sentinels():
+    eng = _engine([
+        {"name": "w", "table": "holding", "address": 0, "datatype": "int16", "scale_ref": "w_sf", "value": 1234.5},
+        {"name": "w_sf", "table": "holding", "address": 1, "datatype": "sunspec_sf", "value": -1},
+        {"name": "na16", "table": "holding", "address": 2, "datatype": "uint16", "nullable": True},
+        {"name": "na32", "table": "holding", "address": 3, "datatype": "int32", "nullable": True},
+        {"name": "naf", "table": "holding", "address": 5, "datatype": "float32", "nullable": True},
+        {"name": "sf_na", "table": "holding", "address": 7, "datatype": "sunspec_sf"},
+    ])
+    dev = next(iter(eng.devices.values()))
+    w = dev.by_name["w"]
+    assert w.raw() == [12345] and w.read() == pytest.approx(1234.5)
+    assert dev.by_name["na16"].raw() == [0xFFFF] and dev.by_name["na16"].json_value() is None
+    assert dev.by_name["na32"].raw() == [0x8000, 0] and dev.by_name["na32"].read() is None
+    assert dev.by_name["naf"].json_value() is None
+    assert dev.by_name["sf_na"].raw() == [0x8000] and dev.by_name["sf_na"].read() is None
+    eng.set_point(dev.name, "na16", 7)
+    assert dev.by_name["na16"].read() == 7
+    eng.set_point(dev.name, "na16", None)
+    assert dev.by_name["na16"].raw() == [0xFFFF]

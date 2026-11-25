@@ -32,3 +32,17 @@ curl -X POST http://127.0.0.1:8080/api/devices/PCS-1/points/p_setpoint/write \
 | `POST` | `/api/config/import` | Import a workbook (multipart `file`); `400` with an error list |
 | `POST` | `/api/templates/reload` | Reload the user template directory; returns `loaded` and per-file `errors` |
 | `POST` | `/api/templates/from-device/{device}` | Save a device's expanded points as a user template (`{"name", "overwrite"}`); `409` if it exists |
+
+## Fault injection
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/faults` | Rule list `{"rules": [...]}` (with `triggers`, `matches`, `active`) |
+| `POST` | `/api/faults` | Create a rule (JSON); returns it with its `id` |
+| `PUT` | `/api/faults/{id}` | Update a rule; omitted fields keep their value |
+| `DELETE` | `/api/faults/{id}` | Delete a rule |
+| `POST` | `/api/faults/clear` | Delete all rules |
+| `POST` | `/api/faults/preset` | Load a YAML / JSON preset (body); replaces all rules, `?replace=false` appends |
+| `GET` | `/api/faults/export` | Rules as `faults.json` |
+
+Changes are pushed on `/ws` as `{"type": "faults", "rules": [...]}`. See [Fault injection](faults.md).

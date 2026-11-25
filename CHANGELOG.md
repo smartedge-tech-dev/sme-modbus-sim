@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Fault injection: runtime rules (exception, delay, no response, disconnect, bad CRC, truncation, wrong ids, busy, freeze, refuse connections) via the Faults tab, `/api/faults` and YAML / JSON presets.
+- SunSpec templates `sunspec_pv_inverter` / `sunspec_meter`, generated from the public SunSpec model definitions (Apache-2.0; vendored from sunspec/models @ 90b4a33); new datatype `sunspec_sf`, point fields `scale_ref` / `nullable`. Not affiliated with, endorsed by, or certified by SunSpec Alliance.
 - First release (0.1.0): a Modbus TCP and Modbus RTU-over-TCP device simulator with a live web UI.
 - Own protocol core (asyncio): MBAP and RTU framers, function codes 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 (hex) with standard exception responses.
 - Serial Modbus RTU listener (`type: rtu`, pyserial: COM port, tty or pyserial URL) with t3.5 / t1.5 frame timing (`strict_timing`), broadcast and 248-255 address handling; a port that cannot be opened marks only that listener as `error`.

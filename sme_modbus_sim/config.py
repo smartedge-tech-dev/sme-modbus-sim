@@ -18,15 +18,16 @@ TABLES = ("coil", "discrete", "input", "holding")
 BIT_TABLES = ("coil", "discrete")
 REGISTER_TABLES = ("input", "holding")
 DATATYPES = ("bool", "bit", "uint16", "int16", "uint32", "int32", "float32",
-             "uint64", "int64", "float64", "string", "enum")
-REGISTER_COUNT = {"bit": 1, "uint16": 1, "int16": 1, "enum": 1,
+             "uint64", "int64", "float64", "string", "enum", "sunspec_sf")
+REGISTER_COUNT = {"bit": 1, "uint16": 1, "int16": 1, "enum": 1, "sunspec_sf": 1,
                   "uint32": 2, "int32": 2, "float32": 2,
                   "uint64": 4, "int64": 4, "float64": 4}
 MAX_ADDRESS = 65535
 
 Table = Literal["coil", "discrete", "input", "holding"]
 Datatype = Literal["bool", "bit", "uint16", "int16", "uint32", "int32", "float32",
-                   "uint64", "int64", "float64", "string", "enum"]
+                   "uint64", "int64", "float64", "string", "enum", "sunspec_sf"]
+SCALE_REF_TYPES = ("uint16", "int16", "uint32", "int32", "uint64", "int64")
 Order = Literal["big", "little"]
 
 
@@ -144,6 +145,10 @@ class PointConfig(_Model):
     min: Optional[float] = None
     max: Optional[float] = None
     labels: Optional[Dict[int, str]] = None  # enum: raw value -> label
+    # SunSpec: engineering = raw x 10^sf, sf read from the referenced ``sunspec_sf`` point at encode/decode time
+    scale_ref: Optional[str] = None
+    # SunSpec "not implemented" sentinel (0x8000 / 0xFFFF / 0x80000000 / 0xFFFFFFFF / NaN) <-> value null
+    nullable: Optional[bool] = None
     behavior: Optional[Dict[str, Any]] = None
 
     @field_validator("labels", mode="before")
@@ -198,6 +203,10 @@ class PointConfig(_Model):
             raise ValueError(f"{where}: count is only valid with datatype string")
         if self.labels is not None and dt != "enum":
             raise ValueError(f"{where}: labels are only valid with datatype enum")
+        if self.scale_ref is not None and dt not in SCALE_REF_TYPES:
+            raise ValueError(f"{where}: scale_ref needs an integer datatype ({', '.join(SCALE_REF_TYPES)})")
+        if self.nullable and dt in ("bit", "string"):
+            raise ValueError(f"{where}: nullable is not valid with datatype {dt}")
         return self
 
 
@@ -211,7 +220,14 @@ def register_count(p: PointConfig) -> int:
 
 
 def check_layout(device: str, points: List[PointConfig]) -> None:
-    """Reject overlapping address ranges within each table (``bit`` points may share a register)."""
+    """Reject overlapping address ranges within each table (``bit`` points may share a register).
+
+    Also checks that every ``scale_ref`` names a ``sunspec_sf`` point of the same device.
+    """
+    sf_names = {p.name for p in points if p.datatype == "sunspec_sf"}
+    for p in points:
+        if p.scale_ref is not None and p.scale_ref not in sf_names:
+            raise ValueError(f"{device}/{p.name}: scale_ref {p.scale_ref!r} is not a sunspec_sf point of this device")
     for table in TABLES:
         ranges: List[tuple] = []  # (start, end_exclusive, name)
         bit_regs: Dict[int, Dict[int, str]] = {}
