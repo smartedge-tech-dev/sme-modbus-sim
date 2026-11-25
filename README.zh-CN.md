@@ -51,7 +51,7 @@ docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
 
 主站示例：`modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6`（串口线另一端），RTU over TCP 用 `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1`。
 
-在一台 Windows 电脑上联调：Windows 没有自带的虚拟 COM 口对。请使用已签名的虚拟串口驱动（有商用产品），或用两个 USB-RS485 转换器互接（A-A、B-B）；com0com 3.0 的 64 位驱动未经正式签名，开启 Secure Boot 时无法加载。只想测 RTU 帧、不装驱动，可以用 `rtu_over_tcp` 监听器。Linux 下用 `socat -d -d pty,raw,echo=0 pty,raw,echo=0` 即可创建一对互通的 pty。
+在一台 Windows 电脑上联调：Windows 没有自带的虚拟 COM 口对。可选方案：[SerialLoom](https://github.com/RahulP5/SerialLoom)（免费，MIT；基于微软签名的 usbip-win2 主控制器，COM 口由 Windows 自带的 usbser 驱动生成）、已签名的商用虚拟串口驱动，或两个 USB-RS485 转换器互接（A-A、B-B）。用 SerialLoom 时，设置了 pyserial `inter_byte_timeout` 的主站（modbus_tk 默认会设）会间歇性读到 0 字节，请在主站端设为 `None`。虚拟串口对不传 RTS / DTR，也不按波特率限速；com0com 3.0 的 64 位驱动未经正式签名，开启 Secure Boot 时无法加载。只想测 RTU 帧、不装驱动，可以用 `rtu_over_tcp` 监听器。Linux 下用 `socat -d -d pty,raw,echo=0 pty,raw,echo=0` 即可创建一对互通的 pty。
 
 ### 源码 / pip
 
@@ -100,7 +100,10 @@ client.close()
 用户本地模板与“将设备另存为模板”；通用模板以及 SunSpec 光伏逆变器 / 电能表 / DER（701-705）/ 电池（802、803）模板；真实设备的只读扫描 / 录制；带设备管理和模板浏览器的 Web UI；
 Windows exe、多架构 Docker、离线包。
 
-后续候选：Modbus ASCII、UDP、串口诊断功能码（07 / 08 / 0B / 0C / 11）、Modbus/TCP Security（TLS）。
+计划：
+
+- 0.2.0（串口线路）：内置 pty 虚拟串口对，免驱动做串口联调（Linux / macOS / WSL2）；串口诊断功能码（07 / 08 / 0B / 0C / 11）；Modbus ASCII。
+- 0.3.0（网络）：Modbus UDP；Modbus/TCP Security（TLS）。
 
 > 与 SunSpec Alliance 无任何关联，未获其认可或认证。`sunspec_pv_inverter`（模型 1、103、120-123、160）、`sunspec_meter`（模型 1、203）、`sunspec_der`（模型 1、701-705）与 `sunspec_battery`（模型 1、802、803）模板由公开的 SunSpec 模型定义（Apache-2.0）生成，实现 SunSpec Modbus 模型。不内置任何厂商的寄存器表；自有厂商表可通过 Excel 或用户本地模板私下导入。
 

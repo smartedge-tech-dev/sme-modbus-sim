@@ -21,4 +21,7 @@ SME ModbusSim は無料の MIT ライセンスで、[smart-edge（智届科技�
 SunSpec Alliance とは提携・推奨・認証の関係にありません。SunSpec テンプレートは公開されている SunSpec モデル定義
 （Apache-2.0）から生成しています。
 
-今後の候補: Modbus ASCII、UDP、シリアル診断ファンクションコード、Modbus/TCP Security（TLS）。
+予定:
+
+- 0.2.0（シリアル回線）: ドライバー不要のシリアル試験用 pty ペア内蔵（Linux / macOS / WSL2）、シリアル診断ファンクションコード（07 / 08 / 0B / 0C / 11）、Modbus ASCII。
+- 0.3.0（ネットワーク）: Modbus UDP、Modbus/TCP Security（TLS）。

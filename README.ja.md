@@ -65,7 +65,7 @@ docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
 
 マスター側: `modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6`（シリアル接続の相手側）、RTU over TCP は `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1`。
 
-1 台の Windows PC で試す場合: Windows には仮想 COM ポートのペアが標準で用意されていません。署名済みの仮想シリアルポートドライバー（市販品があります）を使うか、USB-RS485 アダプター 2 本を相互に配線（A-A、B-B）してください。com0com 3.0 の 64 ビットドライバーは正式署名されておらず、セキュアブート有効時には読み込まれません。ドライバーなしで RTU フレームを試すなら `rtu_over_tcp` リスナーを使えます。Linux では `socat -d -d pty,raw,echo=0 pty,raw,echo=0` で接続済みの pty ペアを作れます。
+1 台の Windows PC で試す場合: Windows には仮想 COM ポートのペアが標準で用意されていません。選択肢: [SerialLoom](https://github.com/RahulP5/SerialLoom)（無料、MIT。Microsoft 署名済みの usbip-win2 ホストコントローラーを使い、COM ポートは Windows 標準の usbser ドライバーが作ります）、署名済みの市販仮想シリアルポートドライバー、USB-RS485 アダプター 2 本の相互配線（A-A、B-B）。SerialLoom では、pyserial の `inter_byte_timeout` を設定するマスター（modbus_tk は既定で設定）が断続的に 0 バイトを読むため、マスター側で `None` にしてください。仮想ペアは RTS / DTR を伝えず、ボーレートどおりの速度にもなりません。com0com 3.0 の 64 ビットドライバーは正式署名されておらず、セキュアブート有効時には読み込まれません。ドライバーなしで RTU フレームを試すなら `rtu_over_tcp` リスナーを使えます。Linux では `socat -d -d pty,raw,echo=0 pty,raw,echo=0` で接続済みの pty ペアを作れます。
 
 ### ソースから実行 / pip
 
@@ -116,7 +116,10 @@ client.close()
 入出力、ユーザーローカルテンプレートと「デバイスをテンプレートとして保存」、汎用テンプレートと SunSpec PV インバーター /
 電力量計 / DER（701-705）/ 蓄電池（802, 803）テンプレート、実機の読み取り専用スキャン / 記録、デバイス管理とテンプレートブラウザー付き Web UI、Windows exe、マルチアーキテクチャ Docker、オフラインアーカイブ。
 
-今後の候補: Modbus ASCII、UDP、シリアル診断ファンクションコード（07 / 08 / 0B / 0C / 11）、Modbus/TCP Security（TLS）。
+予定:
+
+- 0.2.0（シリアル回線）: ドライバー不要のシリアル試験用 pty ペア内蔵（Linux / macOS / WSL2）、シリアル診断ファンクションコード（07 / 08 / 0B / 0C / 11）、Modbus ASCII。
+- 0.3.0（ネットワーク）: Modbus UDP、Modbus/TCP Security（TLS）。
 
 > SunSpec Alliance とは提携・推奨・認証の関係にありません。`sunspec_pv_inverter`（モデル 1, 103, 120-123, 160）、`sunspec_meter`（モデル 1, 203）、`sunspec_der`（モデル 1, 701-705）、`sunspec_battery`（モデル 1, 802, 803）テンプレートは、公開されている SunSpec モデル定義（Apache-2.0）から生成した、SunSpec Modbus モデルを実装するものです。特定メーカーのレジスタマップは内蔵していません。お手元のマップは Excel またはユーザーローカルテンプレートで非公開のまま取り込めます。
 
