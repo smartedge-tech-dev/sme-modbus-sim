@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SME ModbusSim</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/shell/shell.css">
+  <link rel="stylesheet" href="/static/style.css">
+  <!-- Loaded in <head> so the stored theme applies before first paint. -->
+  <script src="/static/shell/shell.js" data-storage="sme-modbus-sim"></script>
+</head>
+<body class="sh-tool">
+<!-- Shell.init() inserts the header before .sh-body and the footer after it. -->
+<div class="sh-body">
+  <div class="layout">
+    <aside class="sidebar">
+      <input id="search" class="search" data-i18n-placeholder="side.filter" data-i18n-aria-label="side.filter">
+      <ul id="devList" class="devlist"></ul>
+      <div class="listeners">
+        <div class="sidehead" data-i18n="side.listeners">Listeners</div>
+        <ul id="lsnList" class="lsnlist"></ul>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section id="devHeader" class="devheader"></section>
+      <div class="tablewrap">
+        <table class="points">
+          <thead><tr>
+            <th data-i18n="col.name">Name</th>
+            <th data-i18n="col.table">Table</th>
+            <th class="num"><button type="button" class="addrmode" id="addrMode" data-i18n-title="col.address.title"></button></th>
+            <th data-i18n="col.datatype">Type</th>
+            <th data-i18n="col.order" data-i18n-title="col.order.title">Order</th>
+            <th class="num" data-i18n="col.value">Value</th>
+            <th data-i18n="col.raw" data-i18n-title="col.raw.title">Raw</th>
+            <th data-i18n="col.access">Access</th>
+            <th data-i18n="col.behavior">Behavior</th>
+          </tr></thead>
+          <tbody id="points"></tbody>
+        </table>
+      </div>
+      <section class="trend" id="trend" hidden>
+        <div class="trendhead"><span id="trendTitle"></span>
+          <button class="btn small" id="trendClose" data-i18n-title="trend.close" data-i18n-aria-label="trend.close">×</button></div>
+        <canvas id="trendCanvas" height="180"></canvas>
+      </section>
+    </main>
+  </div>
+
+  <section class="bottom" id="bottom">
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab sel" data-tab="traffic" role="tab"><span data-i18n="tab.traffic">Traffic</span> <span id="trCount" class="cnt"></span></button>
+      <button type="button" class="tab" data-tab="stats" role="tab" data-i18n="tab.stats">Statistics</button>
+      <button type="button" class="tab" data-tab="log" role="tab"><span data-i18n="tab.log">Event log</span> <span id="logCount" class="cnt"></span></button>
+      <span class="spacer"></span>
+      <button type="button" class="btn small" id="bottomToggle" data-i18n-title="tab.collapse" data-i18n-aria-label="tab.collapse">▾</button>
+    </div>
+    <div class="pane" id="pane-traffic">
+      <div class="trtools">
+        <label><span data-i18n="tr.unit">Unit</span> <input id="trUnit" type="number" min="0" max="255"></label>
+        <label><span data-i18n="tr.fc">FC</span> <input id="trFc" type="number" min="1" max="127"></label>
+        <label class="chk"><input id="trExc" type="checkbox"> <span data-i18n="tr.exc">Exceptions only</span></label>
+        <button type="button" class="btn small" id="trPause" data-i18n="tr.pause">Pause</button>
+        <button type="button" class="btn small" id="trClear" data-i18n="tr.clear">Clear</button>
+        <button type="button" class="btn small" id="trExport" data-i18n="tr.export" data-i18n-title="tr.export.title">Export JSONL</button>
+        <span class="hint" id="trInfo"></span>
+      </div>
+      <div class="trwrap">
+        <table class="traffic">
+          <thead><tr>
+            <th data-i18n="tr.col.time">Time</th><th data-i18n="tr.col.listener">Listener</th>
+            <th data-i18n="tr.col.peer">Peer</th><th data-i18n="tr.col.dir">Dir</th>
+            <th class="num" data-i18n="tr.col.unit">Unit</th><th class="num" data-i18n="tr.col.fc">FC</th>
+            <th data-i18n="tr.col.summary">Summary</th><th data-i18n="tr.col.hex">Hex</th>
+          </tr></thead>
+          <tbody id="trBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="pane" id="pane-stats" hidden>
+      <div class="statsbar"><button type="button" class="btn small" id="statsRefresh" data-i18n="stats.refresh">Refresh</button></div>
+      <div id="statsBody" class="statsbody"></div>
+    </div>
+    <div class="pane" id="pane-log" hidden>
+      <ul id="log" class="log"></ul>
+    </div>
+  </section>
+</div>
+
+<dialog id="dlgYaml" class="dialog sh-dialog">
+  <form method="dialog" class="dlgform">
+    <h3 data-i18n="cfg.title">Configuration (YAML)</h3>
+    <textarea id="yamlText" spellcheck="false"></textarea>
+    <p class="hint" data-i18n="cfg.hint">Apply reloads the running simulator; Save writes the applied configuration back to the config file.</p>
+    <div class="err" id="yamlErr"></div>
+    <div class="dlgbtns">
+      <button class="btn" value="cancel" data-i18n="dlg.cancel">Cancel</button>
+      <button class="btn" type="button" id="yamlSave" data-i18n="cfg.save">Save to file</button>
+      <button class="btn primary" id="yamlApply" value="default" data-i18n="dlg.apply">Apply</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/static/i18n/ja.js"></script>
+<script src="/static/i18n/zh.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
