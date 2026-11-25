@@ -23,8 +23,8 @@ devices:
 
 | Key | Meaning |
 |---|---|
-| `tick_seconds` | Behavior update interval (0.05 - 60 s) |
-| `time_scale` | Simulated seconds per real second |
+| `tick_seconds` | Behavior update interval in seconds (above 0.05, up to 60) |
+| `time_scale` | Simulated seconds per real second (above 0, up to 3600) |
 | `history_size` | Samples kept per point for the UI chart |
 | `running` | Start running or paused |
 
