@@ -75,7 +75,11 @@ async function api(method, url, body, raw) {
   const r = await fetch(url, opt);
   const ct = r.headers.get("content-type") || "";
   const data = ct.includes("json") ? await r.json() : await r.text();
-  if (!r.ok) throw new Error(typeof data === "string" ? data : (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail ?? data)));
+  if (!r.ok) {
+    const err = new Error(typeof data === "string" ? data : (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail ?? data)));
+    err.status = r.status;
+    throw err;
+  }
   return data;
 }
 
@@ -951,6 +955,338 @@ async function importFaults(file) {
   if (r) Shell.toast(t("ft.imported", { n: r.rules.length }), "ok");
 }
 
+// ------------------------------------------------------------------ scan / record a real device (design 20261125-0003 §6)
+
+const SCAN_TYPES = ["uint16", "int16", "uint32", "int32", "float32", "uint64", "int64", "float64", "string"];
+const LOW_CONFIDENCE = 0.6;
+// job: last job summary (WS) or full job (GET, with result); shownId: job whose preview table is rendered (edits
+// survive progress pushes); fetched: "id:state" already fetched with its result; confirm: pending {kind, body, from}.
+const SJ = { job: null, shownId: null, fetched: null, confirm: null };
+
+function scanForm() { try { return JSON.parse(store.get("scan.form", "{}")) || {}; } catch { return {}; } }
+function saveScanForm(patch) { store.set("scan.form", JSON.stringify({ ...scanForm(), ...patch })); }
+
+function fmtDur(s) {
+  s = Math.max(0, Math.round(Number(s) || 0));
+  if (s < 120) return `${s} s`;
+  if (s < 7200) return `${Math.floor(s / 60)} min ${s % 60} s`;
+  return `${(s / 3600).toFixed(1)} h`;
+}
+
+const fmtV = (v) => (v == null ? "" : typeof v === "number" ? String(+v.toPrecision(7)) : String(v));
+
+function targetHtml(p) {
+  // kind: "" (always shown), "net" (tcp / rtu_over_tcp) or "ser" (serial rtu); tgtSync() toggles them.
+  const f = (kind, key, input, wide) => `<label class="ddf${wide ? " wide" : ""}"${kind ? ` data-${kind}="1"` : ""}><span>${esc(t(key))}</span>${input}</label>`;
+  return f("", "tgt.type", `<select id="${p}Type"><option value="tcp">${esc(t("tgt.type.tcp"))}</option>
+      <option value="rtu_over_tcp">${esc(t("tgt.type.rtu_over_tcp"))}</option><option value="rtu">${esc(t("tgt.type.rtu"))}</option></select>`)
+    + f("net", "tgt.host", `<input id="${p}Host" spellcheck="false" placeholder="192.168.0.10">`, true)
+    + f("net", "tgt.port", `<input id="${p}Port" type="number" min="1" max="65535" value="502">`)
+    + f("ser", "tgt.serial", `<input id="${p}Ser" spellcheck="false" placeholder="COM5">`, true)
+    + f("ser", "tgt.baud", `<input id="${p}Baud" type="number" min="300" value="19200">`)
+    + f("ser", "tgt.parity", `<select id="${p}Par"><option>E</option><option>N</option><option>O</option></select>`)
+    + f("ser", "tgt.stopbits", `<select id="${p}Stop"><option>1</option><option>2</option></select>`)
+    + f("", "tgt.unit", `<input id="${p}Unit" type="number" min="0" max="255" value="1" required>`);
+}
+
+function tgtSync(p) {
+  const ser = $(`${p}Type`).value === "rtu";
+  $(`${p}Target`).querySelectorAll("[data-net]").forEach((x) => { x.hidden = ser; });
+  $(`${p}Target`).querySelectorAll("[data-ser]").forEach((x) => { x.hidden = !ser; });
+}
+
+function tgtFill(p, f) {
+  const g = f.target || {};
+  $(`${p}Target`).innerHTML = targetHtml(p);
+  $(`${p}Type`).value = g.type || "tcp";
+  if (g.type === "rtu") {
+    $(`${p}Ser`).value = g.port || "";
+    $(`${p}Baud`).value = g.baudrate || 19200;
+    $(`${p}Par`).value = g.parity || "E";
+    $(`${p}Stop`).value = String(g.stopbits || 1);
+  } else {
+    $(`${p}Host`).value = g.host || "";
+    $(`${p}Port`).value = g.port || 502;
+  }
+  $(`${p}Unit`).value = f.unit ?? 1;
+  tgtSync(p);
+}
+
+function tgtRead(p) {
+  const type = $(`${p}Type`).value;
+  const target = type === "rtu"
+    ? { type, port: $(`${p}Ser`).value.trim(), baudrate: Number($(`${p}Baud`).value), parity: $(`${p}Par`).value, stopbits: Number($(`${p}Stop`).value) }
+    : { type, host: $(`${p}Host`).value.trim(), port: Number($(`${p}Port`).value) };
+  return { target, unit: Number($(`${p}Unit`).value) };
+}
+
+function rangeRow(r = { table: "holding", start: 0, count: 100 }) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td><select>${Object.keys(TABLE_PREFIX).map((x) => `<option value="${x}" ${x === r.table ? "selected" : ""}>${esc(t(`table.${x}`))}</option>`).join("")}</select></td>
+    <td><input type="number" min="0" max="65535" value="${Number(r.start) || 0}" required></td>
+    <td><input type="number" min="1" max="65536" value="${Number(r.count) || 1}" required></td>
+    <td><button type="button" class="btn small scdel" title="${esc(t("scan.range.del"))}" aria-label="${esc(t("scan.range.del"))}">×</button></td>`;
+  $("scRanges").appendChild(tr);
+}
+
+function openScan() {
+  const f = scanForm();
+  tgtFill("sc", f);
+  $("scRanges").innerHTML = "";
+  (f.ranges?.length ? f.ranges : [undefined]).forEach((r) => rangeRow(r));
+  if (f.rate) $("scRate").value = f.rate;
+  if (f.samples) $("scSamples").value = f.samples;
+  $("scErr").textContent = "";
+  $("dlgScan").showModal();
+}
+
+async function submitScan(ev) {
+  ev.preventDefault();
+  const ranges = [...$("scRanges").rows].map((tr) => {
+    const [s, a, n] = tr.querySelectorAll("select, input");
+    return { table: s.value, start: Number(a.value), count: Number(n.value) };
+  });
+  if (!ranges.length) { $("scErr").textContent = t("scan.ranges.required"); return; }
+  const body = { ...tgtRead("sc"), ranges, rate: Number($("scRate").value), samples: Number($("scSamples").value) };
+  saveScanForm(body);
+  try { openConfirm("scan", body, await api("POST", "/api/scan/plan", body), "dlgScan"); }
+  catch (e) { $("scErr").textContent = e.message; }
+}
+
+async function openRecord() {
+  const f = scanForm();
+  tgtFill("rc", f);
+  let tpls = [];
+  try { tpls = await api("GET", "/api/templates"); } catch (e) { toast(e.message); }
+  const devs = S.snap?.devices || [];
+  const opt = (v, txt) => `<option value="${esc(v)}">${esc(txt)}</option>`;
+  $("rcSrc").innerHTML = (devs.length ? `<optgroup label="${esc(t("rec.src.devices"))}">${devs.map((d) => opt(`device:${d.name}`, t("rec.src.device", { name: d.name, unit: d.unit_id }))).join("")}</optgroup>` : "")
+    + (tpls.length ? `<optgroup label="${esc(t("rec.src.templates"))}">${tpls.map((x) => opt(`template:${x.name}`, `${x.title} (${x.name})`)).join("")}</optgroup>` : "");
+  if (f.source && [...$("rcSrc").options].some((o) => o.value === f.source)) $("rcSrc").value = f.source;
+  if (f.rec_period != null) $("rcPeriod").value = f.rec_period;
+  if (f.rec_duration != null) $("rcDuration").value = f.rec_duration;
+  if (f.rec_rate != null) $("rcRate").value = f.rec_rate;
+  $("rcFile").value = "";
+  $("rcErr").textContent = "";
+  $("dlgRecord").showModal();
+}
+
+async function submitRecord(ev) {
+  ev.preventDefault();
+  const src = $("rcSrc").value, i = src.indexOf(":");
+  if (i < 0) { $("rcErr").textContent = t("rec.source.required"); return; }
+  const body = { ...tgtRead("rc"), [src.slice(0, i)]: src.slice(i + 1), period: Number($("rcPeriod").value),
+    duration: Number($("rcDuration").value), rate: Number($("rcRate").value) };
+  const file = $("rcFile").value.trim();
+  if (file) body.file = file;
+  saveScanForm({ target: body.target, unit: body.unit, source: src, rec_period: body.period, rec_duration: body.duration, rec_rate: body.rate });
+  try {
+    const plan = await api("POST", "/api/record/plan", body);
+    if (!body.file) body.file = String(plan.file).split(/[\\/]/).pop();   // start writes the file the plan showed
+    openConfirm("record", body, plan, "dlgRecord");
+  } catch (e) { $("rcErr").textContent = e.message; }
+}
+
+function openConfirm(kind, body, plan, from) {
+  SJ.confirm = { kind, body, from };
+  const rows = [[t("tgt.head"), plan.target], [t("tgt.unit"), plan.unit]];
+  if (kind === "scan") {
+    rows.push([t("scan.ranges"), plan.ranges.map((r) => `${t(`table.${r.table}`)} ${r.start}–${r.start + r.count - 1} (${r.count})`).join("\n")],
+      [t("scan.samples"), plan.samples]);
+  } else {
+    rows.push([t("rec.points"), plan.points], [t("rec.period"), `${plan.period_s} s`], [t("rec.cycles"), plan.cycles],
+      [t("rec.per_cycle"), plan.requests_per_cycle], [t("rec.file"), plan.file]);
+  }
+  rows.push([t("scan.rate"), plan.rate], [t("plan.requests"), plan.requests], [t("plan.duration"), fmtDur(plan.duration_s)]);
+  $("cfTitle").textContent = t(kind === "scan" ? "scan.confirm.title" : "rec.confirm.title");
+  $("cfStart").textContent = t(kind === "scan" ? "scan.start" : "rec.start");
+  $("cfBody").innerHTML = rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v).replace(/\n/g, "<br>")}</td></tr>`).join("");
+  $("cfNote").textContent = kind === "scan" ? t("plan.note.scan") : "";
+  $("cfErr").textContent = "";
+  $(from).close();
+  $("dlgConfirm").showModal();
+}
+
+async function startConfirmed(ev) {
+  ev.preventDefault();
+  const c = SJ.confirm;
+  try {
+    const job = await api("POST", `/api/${c.kind}/start`, c.body);
+    $("dlgConfirm").close();
+    showJob(job);
+  } catch (e) {
+    if (e.status !== 409) { $("cfErr").textContent = e.message; return; }
+    $("dlgConfirm").close();   // a job is already running: show it instead of a dead end
+    Shell.toast(t("job.busy"), "info");
+    openJob(false);
+  }
+}
+
+async function openJob(user) {
+  try { showJob(await api("GET", "/api/scan/job")); }
+  catch (e) {
+    if (e.status !== 404) toast(e.message);
+    else if (user) Shell.toast(t("job.none"), "info");
+  }
+}
+
+function showJob(job) {
+  SJ.job = job;
+  if ("result" in job && job.state !== "running") SJ.fetched = `${job.id}:${job.state}`;
+  renderJob();
+  if (!$("dlgJob").open) $("dlgJob").showModal();
+}
+
+function onScanJob(job) {
+  if (!job) return;
+  const prev = SJ.job;
+  SJ.job = { ...job, result: prev && prev.id === job.id ? prev.result : null };
+  if (!$("dlgJob").open) return;
+  renderJob();
+  const key = `${job.id}:${job.state}`;
+  if (job.state !== "running" && SJ.fetched !== key) {   // WS summaries carry no result: fetch it once
+    SJ.fetched = key;
+    api("GET", "/api/scan/job").then((j) => { if (j.id === job.id) { SJ.job = j; renderJob(); } }).catch((e) => toast(e.message));
+  }
+}
+
+function jobStateLabel(s) {
+  return { running: t("job.state.running"), done: t("job.state.done"), cancelled: t("job.state.cancelled"), error: t("job.state.error") }[s] || s;
+}
+
+function jobPhaseLabel(p) {
+  return { discover: t("job.phase.discover"), sample: t("job.phase.sample"), identify: t("job.phase.identify"),
+    done: t("job.phase.done"), record: t("job.phase.record") }[p] || p;
+}
+
+function renderJob() {
+  const j = SJ.job, p = j.progress || {}, running = j.state === "running", scan = j.kind === "scan";
+  $("jbTitle").textContent = t(scan ? "job.title.scan" : "job.title.record", { target: j.target, unit: j.unit });
+  const st = $("jbStatus");
+  st.className = `jbstatus ${j.state}`;
+  st.textContent = jobStateLabel(j.state) + (running && p.phase ? ` — ${jobPhaseLabel(p.phase)}` : "");
+  const total = scan ? p.estimate || j.plan?.requests : j.plan?.requests;
+  const bar = $("jbBar");
+  bar.hidden = !running;
+  if (total) { bar.max = total; bar.value = Math.min(p.requests || 0, total); } else bar.removeAttribute("value");
+  const rows = [[t("plan.requests"), total ? `${p.requests ?? 0} / ${total}` : p.requests ?? 0]];
+  if (scan) rows.push([t("job.found"), p.found ?? 0], [t("job.errors"), p.errors ?? 0]);
+  else rows.push([t("job.rows"), `${p.rows ?? 0} / ${p.cycles ?? j.plan?.cycles ?? "?"}`], [t("job.failed"), p.failed ?? 0]);
+  rows.push([t("job.elapsed"), fmtDur((j.finished || Date.now() / 1000) - j.started)]);
+  $("jbProg").innerHTML = rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("");
+  $("jbErr").textContent = j.error || "";
+  $("jbCancel").hidden = !running;
+  const res = j.result;
+  $("jbScan").hidden = !(scan && res && j.state === "done");
+  $("jbRec").hidden = !(!scan && res);
+  if (scan && res && j.state === "done" && SJ.shownId !== j.id) renderPreview(j);
+  if (!scan && res) {
+    $("jbPath").textContent = t("rec.saved", { path: res.path, rows: res.rows });
+    $("jbWarn").innerHTML = (res.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+  }
+}
+
+function renderPreview(j) {
+  SJ.shownId = j.id;
+  const res = j.result, smp = new Map((res.readable || []).map((r) => [`${r.table}:${r.address}`, r.samples]));
+  const id = res.identification;
+  $("jbIdent").textContent = id && Object.keys(id).length
+    ? `${t("scan.ident")}: ${Object.entries(id).map(([k, v]) => `${k} = ${v}`).join(", ")}` : t("scan.ident.none");
+  $("jbEmpty").hidden = res.suggestions.length > 0;
+  $("jbAll").checked = true;
+  const opts = (list, cur) => list.map((x) => `<option ${x === cur ? "selected" : ""}>${x}</option>`).join("");
+  $("jbRows").innerHTML = res.suggestions.map((s) => {
+    const bit = s.table === "coil" || s.table === "discrete", n = s.count || 1;
+    const words = Array.from({ length: n }, (_, i) => smp.get(`${s.table}:${s.address + i}`) || []);
+    const conf = Math.round((s.confidence ?? 0) * 100), low = (s.confidence ?? 0) < LOW_CONFIDENCE;
+    return `<tr data-table="${esc(s.table)}" data-addr="${s.address}" data-count="${n}">
+      <td><input type="checkbox" class="keep" checked></td>
+      <td>${esc(t(`table.${s.table}`))}</td><td class="num">${s.address}${n > 1 ? `–${s.address + n - 1}` : ""}</td>
+      <td class="smp" title="${esc(words.map((w, i) => `${s.address + i}: ${w.join(", ")}`).join("\n"))}">${esc(words[0].join(", "))}${n > 1 ? " …" : ""}</td>
+      <td class="smp">${esc(fmtV(s.value))}</td>
+      <td>${bit ? "bool" : `<select class="dt">${opts(SCAN_TYPES, s.datatype)}</select>`}</td>
+      <td>${bit ? "" : `<select class="bo">${opts(["big", "little"], s.byte_order)}</select>`}</td>
+      <td>${bit ? "" : `<select class="wo">${opts(["big", "little"], s.word_order)}</select>`}</td>
+      <td><input type="text" class="nm" value="${esc(s.name)}" spellcheck="false"></td>
+      <td>${bit ? "" : `<input type="number" class="sc sm" step="any" value="1">`}</td>
+      <td>${bit ? "" : `<input type="text" class="un sm" spellcheck="false">`}</td>
+      <td class="num${low ? " low" : ""}"${low ? ` title="${esc(t("scan.conf.low"))}"` : ""}>${conf}%</td>
+      <td class="why" title="${esc(s.reason)}">${esc(s.reason)}</td></tr>`;
+  }).join("");
+  const base = `scanned_${String(res.target).replace(/[^A-Za-z0-9]+/g, "_")}_u${res.unit}`.replace(/_+/g, "_");
+  if (!$("jbTplName").value) $("jbTplName").value = base;
+  if (!$("jbDevName").value) $("jbDevName").value = base;
+}
+
+function scanEdits() {
+  return [...$("jbRows").rows].map((tr) => {
+    const q = (c) => tr.querySelector(c);
+    const e = { table: tr.dataset.table, address: Number(tr.dataset.addr), keep: q(".keep").checked, name: q(".nm").value.trim() };
+    if (q(".dt")) {
+      e.datatype = q(".dt").value; e.byte_order = q(".bo").value; e.word_order = q(".wo").value;
+      if (e.datatype === "string") e.count = Number(tr.dataset.count);
+      const sc = q(".sc").value.trim();
+      if (sc !== "") e.scale = Number(sc);
+      e.units = q(".un").value.trim();
+    }
+    return e;
+  });
+}
+
+async function applyTemplate() {
+  const name = $("jbTplName").value.trim();
+  $("jbErr").textContent = "";
+  if (!name) { $("jbErr").textContent = t("scan.apply.name.required"); $("jbTplName").focus(); return; }
+  const body = { name, edits: scanEdits() };
+  const title = $("jbTplTitle").value.trim();
+  if (title) body.title = title;
+  try {
+    let r;
+    try { r = await api("POST", "/api/scan/apply/template", body); }
+    catch (e) {
+      if (e.status !== 409 || !/already exists/.test(e.message) || !confirm(t("common.device_templates.save.exists", { name }))) throw e;
+      r = await api("POST", "/api/scan/apply/template", { ...body, overwrite: true });
+    }
+    Shell.toast(t("scan.apply.tpl.ok", { name: r.name, n: r.points, path: r.path }), "ok");
+  } catch (e) { $("jbErr").textContent = e.message; }
+}
+
+async function applyDevice() {
+  const name = $("jbDevName").value.trim();
+  $("jbErr").textContent = "";
+  if (!name) { $("jbErr").textContent = t("scan.apply.name.required"); $("jbDevName").focus(); return; }
+  const body = { name, edits: scanEdits() };
+  if ($("jbDevUnit").value !== "") body.unit_id = Number($("jbDevUnit").value);
+  try {
+    const r = await api("POST", "/api/scan/apply/device", body);
+    $("dlgJob").close();
+    Shell.toast(t("dev.added", { name: r.name, unit: r.device.unit_id }), "ok");
+    focusDevice(r.name);
+  } catch (e) { $("jbErr").textContent = e.message; }
+}
+
+$("scForm").onsubmit = submitScan;
+$("scCancel").onclick = () => $("dlgScan").close();
+$("scRangeAdd").onclick = () => rangeRow();
+$("scRanges").onclick = (e) => { if (e.target.classList.contains("scdel")) e.target.closest("tr").remove(); };
+$("scTarget").onchange = (e) => { if (e.target.id === "scType") tgtSync("sc"); };
+$("rcTarget").onchange = (e) => { if (e.target.id === "rcType") tgtSync("rc"); };
+$("rcForm").onsubmit = submitRecord;
+$("rcCancel").onclick = () => $("dlgRecord").close();
+$("cfForm").onsubmit = startConfirmed;
+$("cfBack").onclick = () => { $("dlgConfirm").close(); $(SJ.confirm.from).showModal(); };
+$("jbForm").onsubmit = (e) => e.preventDefault();
+$("jbCancel").onclick = () => api("POST", "/api/scan/job/cancel").catch((e) => toast(e.message));
+$("jbClose").onclick = () => $("dlgJob").close();
+$("jbTplSave").onclick = applyTemplate;
+$("jbDevAdd").onclick = applyDevice;
+$("jbAll").onchange = (e) => {
+  for (const c of $("jbRows").querySelectorAll(".keep")) { c.checked = e.target.checked; c.closest("tr").classList.toggle("drop", !c.checked); }
+};
+$("jbRows").onchange = (e) => {
+  if (e.target.classList.contains("keep")) e.target.closest("tr").classList.toggle("drop", !e.target.checked);
+};
+
 // ------------------------------------------------------------------ shell
 
 Shell.init({
@@ -973,6 +1309,10 @@ Shell.init({
     ] },
     { id: "tpl", label: "common.device_templates.menu", items: [
       { id: "tpl.reload", label: "common.device_templates.reload", onClick: reloadTemplates },
+      { separator: true },
+      { id: "tpl.scan", label: "menu.tpl.scan", onClick: openScan },
+      { id: "tpl.record", label: "menu.tpl.record", onClick: openRecord },
+      { id: "tpl.job", label: "menu.tpl.job", onClick: () => openJob(true) },
     ] },
     { id: "view", label: "common.menu.view", items: [
       { id: "view.traffic", label: "menu.view.traffic", onClick: () => showTab("traffic") },
@@ -1012,6 +1352,7 @@ function connect() {
     else if (msg.type === "trace") addTrace(msg.events || []);
     else if (msg.type === "log") addLog(msg.event);
     else if (msg.type === "faults") { S.faults = msg.rules || []; renderFaults(); }
+    else if (msg.type === "scan") onScanJob(msg.job);
     else if (msg.type === "simulation" && S.snap) {
       S.snap.running = msg.running; S.snap.time_scale = msg.time_scale; renderSim(S.snap);
     } else if (msg.type === "stats") {

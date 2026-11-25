@@ -171,6 +171,114 @@
   </form>
 </dialog>
 
+<dialog id="dlgScan" class="dialog sh-dialog">
+  <form class="dlgform" id="scForm">
+    <h3 data-i18n="scan.title">Scan a real device</h3>
+    <p class="hint" data-i18n="scan.hint">Reads the given address ranges of a real Modbus device and suggests a point list. Read-only.</p>
+    <div class="sidehead" data-i18n="tgt.head">Target</div>
+    <div class="tgtgrid" id="scTarget"></div>
+    <div class="sidehead" data-i18n="scan.ranges">Address ranges</div>
+    <table class="traffic scranges">
+      <thead><tr><th data-i18n="scan.col.table">Table</th><th data-i18n="scan.col.start">Start</th><th data-i18n="scan.col.count">Count</th><th></th></tr></thead>
+      <tbody id="scRanges"></tbody>
+    </table>
+    <div><button type="button" class="btn small" id="scRangeAdd" data-i18n="scan.range.add">Add range</button></div>
+    <div class="tgtgrid">
+      <label class="ddf"><span data-i18n="scan.rate">Rate (requests/s)</span><input id="scRate" type="number" min="0.1" max="100" step="any" value="10" required></label>
+      <label class="ddf"><span data-i18n="scan.samples">Samples per address</span><input id="scSamples" type="number" min="1" max="10" value="3" required></label>
+    </div>
+    <div class="err" id="scErr"></div>
+    <div class="dlgbtns">
+      <button class="btn" type="button" id="scCancel" data-i18n="common.dlg.cancel">Cancel</button>
+      <button class="btn primary" type="submit" data-i18n="scan.next">Scan…</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgRecord" class="dialog sh-dialog">
+  <form class="dlgform" id="rcForm">
+    <h3 data-i18n="rec.title">Record values from a real device</h3>
+    <p class="hint" data-i18n="rec.hint">Polls the points of a device or template from a real Modbus device and writes them to a CSV file next to the config file. Read-only.</p>
+    <div class="sidehead" data-i18n="tgt.head">Target</div>
+    <div class="tgtgrid" id="rcTarget"></div>
+    <div class="tgtgrid">
+      <label class="ddf wide"><span data-i18n="rec.source">Points from</span><select id="rcSrc" required></select></label>
+      <label class="ddf"><span data-i18n="rec.period">Period (s)</span><input id="rcPeriod" type="number" min="0.1" max="3600" step="any" value="1" required></label>
+      <label class="ddf"><span data-i18n="rec.duration">Duration (s)</span><input id="rcDuration" type="number" min="0" max="604800" step="any" value="60" required></label>
+      <label class="ddf"><span data-i18n="scan.rate">Rate (requests/s)</span><input id="rcRate" type="number" min="0.1" max="100" step="any" value="10" required></label>
+      <label class="ddf wide"><span data-i18n="rec.file">CSV file name</span><input id="rcFile" spellcheck="false" pattern="[^/\\]+\.[cC][sS][vV]" data-i18n-placeholder="rec.file.ph"></label>
+    </div>
+    <div class="err" id="rcErr"></div>
+    <div class="dlgbtns">
+      <button class="btn" type="button" id="rcCancel" data-i18n="common.dlg.cancel">Cancel</button>
+      <button class="btn primary" type="submit" data-i18n="rec.next">Record…</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgConfirm" class="dialog sh-dialog">
+  <form class="dlgform" id="cfForm">
+    <h3 id="cfTitle"></h3>
+    <table class="kv" id="cfBody"></table>
+    <p class="hint readonly" data-i18n="scan.readonly">Read-only: only FC 01/02/03/04 and 2B/0E (device identification) are sent. Nothing is written to the device.</p>
+    <p class="hint" id="cfNote"></p>
+    <div class="err" id="cfErr"></div>
+    <div class="dlgbtns">
+      <button class="btn" type="button" id="cfBack" data-i18n="scan.back">Back</button>
+      <button class="btn primary" type="submit" id="cfStart"></button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgJob" class="dialog sh-dialog jobdlg">
+  <form class="dlgform" id="jbForm">
+    <h3 id="jbTitle"></h3>
+    <p id="jbStatus" class="jbstatus"></p>
+    <progress id="jbBar" max="1" value="0"></progress>
+    <table class="kv" id="jbProg"></table>
+    <div class="err" id="jbErr"></div>
+    <div id="jbScan" hidden>
+      <p class="hint" id="jbIdent"></p>
+      <div class="trwrap jbwrap">
+        <table class="traffic scprev">
+          <thead><tr>
+            <th><input type="checkbox" id="jbAll" checked data-i18n-title="scan.col.keep.title"></th>
+            <th data-i18n="scan.col.table">Table</th><th class="num" data-i18n="scan.col.addr">Address</th>
+            <th data-i18n="scan.col.samples">Samples</th><th data-i18n="scan.col.value">Value</th>
+            <th data-i18n="scan.col.type">Datatype</th><th data-i18n="scan.col.byte">Byte order</th><th data-i18n="scan.col.word">Word order</th>
+            <th data-i18n="scan.col.name">Name</th><th data-i18n="scan.col.scale">Scale</th><th data-i18n="scan.col.units">Units</th>
+            <th class="num" data-i18n="scan.col.conf">Confidence</th><th data-i18n="scan.col.reason">Reason</th>
+          </tr></thead>
+          <tbody id="jbRows"></tbody>
+        </table>
+      </div>
+      <p class="hint" id="jbEmpty" data-i18n="scan.empty" hidden>No readable address was found in the given ranges.</p>
+      <div class="jbapply">
+        <div>
+          <div class="sidehead" data-i18n="scan.apply.tpl">Save as template</div>
+          <label class="ddf"><span data-i18n="scan.apply.tpl.name">Template name</span><input id="jbTplName" spellcheck="false" pattern="[A-Za-z0-9_.\-]+"></label>
+          <label class="ddf"><span data-i18n="scan.apply.tpl.titleLabel">Title (optional)</span><input id="jbTplTitle"></label>
+          <button type="button" class="btn small" id="jbTplSave" data-i18n="scan.apply.tpl">Save as template</button>
+        </div>
+        <div>
+          <div class="sidehead" data-i18n="scan.apply.dev">Add as device</div>
+          <label class="ddf"><span data-i18n="devdlg.name">Name</span><input id="jbDevName" spellcheck="false"></label>
+          <label class="ddf"><span data-i18n="scan.apply.dev.unit">Unit ID (empty = next free)</span><input id="jbDevUnit" type="number" min="1" max="247"></label>
+          <button type="button" class="btn small" id="jbDevAdd" data-i18n="scan.apply.dev">Add as device</button>
+        </div>
+      </div>
+    </div>
+    <div id="jbRec" hidden>
+      <p><a id="jbCsv" href="/api/scan/job/csv" download data-i18n="rec.download">Download CSV</a> <span class="hint" id="jbPath"></span></p>
+      <ul class="errlist" id="jbWarn"></ul>
+    </div>
+    <div class="dlgbtns">
+      <button class="btn danger" type="button" id="jbCancel" data-i18n="job.cancel">Cancel job</button>
+      <button class="btn primary" type="button" id="jbClose" data-i18n="common.dlg.close">Close</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="dlgErrors" class="dialog sh-dialog">
   <form method="dialog" class="dlgform">
     <h3 id="errTitle"></h3>

@@ -219,3 +219,32 @@ table.traffic { width: 100%; border-collapse: collapse; font-family: var(--mono)
 .ddparams label span { font-family: var(--mono); font-size: 12px; }
 .ddparams input[type="text"], .ddparams input[type="number"] { width: 55%; }
 .points td.val select { max-width: 100%; }
+
+/* scan / record (design 20261125-0003 §6) */
+.tgtgrid { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.tgtgrid .ddf { min-width: 120px; flex: 1 1 120px; }
+.tgtgrid .ddf.wide { flex-basis: 240px; }
+.tgtgrid .ddf[hidden] { display: none; }
+.scranges input[type=number] { width: 96px; }
+.kv { border-collapse: collapse; font-size: 13px; }
+.kv th { text-align: left; font-weight: 400; color: var(--muted); padding: 2px 16px 2px 0; vertical-align: top; white-space: nowrap; }
+.kv td { font-family: var(--mono); padding: 2px 0; }
+.readonly { color: var(--ok); }
+.jobdlg { width: min(1180px, calc(100vw - 32px)); }
+.jbstatus { margin: 0; font-weight: 600; }
+.jbstatus.error { color: var(--bad); }
+.jbstatus.done { color: var(--ok); }
+#jbBar { width: 100%; }
+#jbBar[hidden] { display: none; }
+.jbwrap { max-height: 46vh; overflow: auto; border: 1px solid var(--line); }
+.scprev td { vertical-align: middle; }
+.scprev input[type=text] { width: 120px; }
+.scprev input.sm { width: 56px; }
+.scprev tr.drop td:not(:first-child) { opacity: .45; }
+.scprev .low { color: var(--warn); font-weight: 600; }
+.scprev .why { color: var(--muted); font-size: 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scprev .smp { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.jbapply { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+@media (max-width: 640px) { .jbapply { grid-template-columns: 1fr; } }
+.dlgbtns .btn[hidden] { display: none; }
+.scprev th, .scprev td:not(.why) { white-space: nowrap; }
