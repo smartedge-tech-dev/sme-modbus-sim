@@ -7,8 +7,8 @@
 pymodbus など）が読み書きする様子を、値の変化とともにブラウザで確認できます。
 
 - **1 つのポートで複数デバイス。** 1 つのリスナーが複数のユニット ID を受け持ち、1 台のデバイスを複数のリスナーに
-  接続することもできます。Modbus TCP と Modbus RTU over TCP（シリアルゲートウェイ向け）を同時に利用できます。
-- **独自のプロトコルコア。** ファンクションコード 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10（16 進） に対応し、標準の例外
+  接続することもできます。Modbus TCP、Modbus RTU over TCP（シリアルゲートウェイ向け）、シリアル RTU（COM ポート / tty）を同時に利用できます。
+- **独自のプロトコルコア。** ファンクションコード 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E（16 進）に対応し、標準の例外
   レスポンスを返します。Modbus TCP / RTU 互換のフレーミング（MBAP、CRC-16）です。
 - **豊富なデータ型。** `bool`、`int16` / `uint16`、`int32` / `uint32`、`int64` / `uint64`、`float32` / `float64`、
   `string`、`enum`、レジスタ内ビットに対応し、バイトオーダー・ワードオーダー（ABCD / CDAB / BADC / DCBA）、
@@ -18,7 +18,9 @@ pymodbus など）が読み書きする様子を、値の変化とともにブ�
   CSV リプレイを使えます。
 - **ライブ UI。** WebSocket でリアルタイム更新されるポイント一覧、ブラウザからの書き込み、ポイントごとの履歴、
   Modbus 通信ログを備えます。UI は英語・日本語・簡体字中国語です。
-- **設定が容易。** YAML を編集し、汎用テンプレートからデバイスを追加し、設定ファイルへ保存できます。
+- **テンプレート。** 蓄電池 PCS / BMS / 電力量計 / センサーの汎用テンプレート、SunSpec PV インバーター・電力量計テンプレート、ユーザーローカルテンプレート、「デバイスをテンプレートとして保存」。
+- **障害注入。** 遅延、無応答、例外、CRC 不正、切断などを UI・REST・プリセットから注入できます。
+- **設定が容易。** YAML や Excel ポイント一覧を編集し、UI でデバイス管理・テンプレート閲覧を行い、設定ファイルへ保存できます。
 
 本プロジェクト向けに書かれた asyncio ベースのプロトコルコア、FastAPI、pyserial で構成されています。フロントエンドの
 ビルド工程はありません。
@@ -42,6 +44,26 @@ docker run --rm -p 8080:8080 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-de
 イメージは `linux/amd64`、`linux/arm64`、`linux/arm/v7` 向けに公開されます。オフライン用アーカイブ
 （`docker load -i`）は各リリースに添付されます。ローカル時刻を使うには `-e TZ=Asia/Tokyo` を指定します（既定は UTC）。
 独自の設定を使う場合: `-v ./my.yaml:/app/configs/my.yaml ... -c configs/my.yaml`。
+
+### シリアル RTU と RTU over TCP
+
+シリアル RTU は既定で 19200 baud、8E1 です（`type: rtu`、`port: COM5` または `/dev/ttyUSB0`）。RTU over TCP は RTU フレームを TCP ポートで提供し、シリアルゲートウェイや RTU over TCP モードのマスター向けです。
+
+```yaml
+listeners:
+  - {id: com1, type: rtu, port: COM5, baudrate: 19200, parity: E}   # serial RTU, 8E1
+  - {id: gw1, type: rtu_over_tcp, host: 0.0.0.0, port: 5021}        # RTU over TCP
+```
+
+Docker ではシリアルアダプターを `--device` でコンテナーに渡します（Linux ホスト。コンテナーは root 以外で動作するため、デバイスのグループを追加します）:
+
+```bash
+docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8080:8080 \
+  -v ./serial.yaml:/app/configs/serial.yaml ghcr.io/smartedge-tech-dev/sme-modbus-sim \
+  python -m sme_modbus_sim run -c configs/serial.yaml --host 0.0.0.0 --no-browser
+```
+
+マスター側: `modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6`（シリアル接続の相手側）、RTU over TCP は `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1`。
 
 ### ソースから実行 / pip
 
@@ -87,13 +109,15 @@ client.close()
 
 ## ロードマップ
 
-- **0.1.0** — Modbus TCP と RTU over TCP、FC 01〜06 / 0F / 10、全データ型、YAML、Web UI、汎用テンプレート、
-  Windows exe、Docker、CI。
-- **0.2.0** — シリアル RTU（COM ポート / `/dev/ttyUSB*`）、FC 16 マスク書き込み、FC 17 読み書き複合、
-  FC 2B/0E 機器識別読み出し、障害注入 UI（遅延、応答破棄、例外、CRC 不正）、Excel ポイント一覧の入出力、
-  ユーザーローカルテンプレート、公開されている SunSpec モデル定義から生成したテンプレート。
+以下はすべて 0.1.0（未リリース）に含まれます: Modbus TCP、RTU over TCP、シリアル RTU、ファンクションコード
+01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E、障害注入（UI・REST・プリセット）、Excel ポイント一覧の
+入出力、ユーザーローカルテンプレートと「デバイスをテンプレートとして保存」、汎用テンプレートと SunSpec PV インバーター /
+電力量計テンプレート、デバイス管理とテンプレートブラウザー付き Web UI、Windows exe、マルチアーキテクチャ Docker、オフラインアーカイブ。
 
-> SunSpec Alliance とは提携・推奨・認証の関係にありません。SunSpec テンプレート：`sunspec_pv_inverter`（モデル 1, 103, 120–123, 160）と `sunspec_meter`（モデル 1, 203）。公開されている SunSpec モデル定義（Apache-2.0）から生成しています。
+今後の候補: Modbus ASCII、UDP、シリアル診断ファンクションコード（07 / 08 / 0B / 0C / 11）、Modbus/TCP Security（TLS）、
+SunSpec DER・蓄電池モデル、実機のスキャン / 記録によるポイント一覧作成。
+
+> SunSpec Alliance とは提携・推奨・認証の関係にありません。`sunspec_pv_inverter`（モデル 1, 103, 120-123, 160）と `sunspec_meter`（モデル 1, 203）テンプレートは、公開されている SunSpec モデル定義（Apache-2.0）から生成した、SunSpec Modbus モデルを実装するものです。特定メーカーのレジスタマップは内蔵していません。お手元のマップは Excel またはユーザーローカルテンプレートで非公開のまま取り込めます。
 
 ## 商用サポート・カスタム開発
 

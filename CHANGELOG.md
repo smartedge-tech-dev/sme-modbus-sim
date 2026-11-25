@@ -7,20 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+
+First release (0.1.0): a Modbus device simulator with a live web UI.
+
+**Protocol**
+- Own asyncio protocol core with MBAP and RTU framers; function codes 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 (mask write register) / 17 (read/write multiple registers) / 2B-0E (Read Device Identification, served from `identification`), with standard exception responses.
+- Listeners: Modbus TCP, Modbus RTU over TCP and serial RTU (`type: rtu`, pyserial: COM port, tty or pyserial URL; default 19200 8E1) with t3.5 / t1.5 frame timing (`strict_timing`), broadcast and 248-255 address handling; a port that cannot be opened marks only that listener as `error`.
+- One listener serves many unit IDs and one device can be attached to several listeners; `unit_id_mode` `strict` / `any`, `unknown_unit` `ignore` / `exception`.
+- Data types `bool`, `bit`, `uint16`, `int16`, `uint32`, `int32`, `float32`, `uint64`, `int64`, `float64`, `string`, `enum`, `sunspec_sf`, with byte order / word order (ABCD, CDAB, BADC, DCBA), scale, offset, `scale_ref` and `nullable` points.
+
+**Simulation**
+- Behaviors `sine`, `random`, `random_walk`, `expr`, `follow`, `ramp`, `counter`, `pulse`, `replay` (CSV); min / max clamping, integer counter wrap-around, read-only point protection; cross-device coupling (the demo site couples PCS, BMS and meter).
 - Fault injection: runtime rules (exception, delay, no response, disconnect, bad CRC, truncation, wrong ids, busy, freeze, refuse connections) via the Faults tab, `/api/faults` and YAML / JSON presets.
-- SunSpec templates `sunspec_pv_inverter` / `sunspec_meter`, generated from the public SunSpec model definitions (Apache-2.0; vendored from sunspec/models @ 90b4a33); new datatype `sunspec_sf`, point fields `scale_ref` / `nullable`. Not affiliated with, endorsed by, or certified by SunSpec Alliance.
-- First release (0.1.0): a Modbus TCP and Modbus RTU-over-TCP device simulator with a live web UI.
-- Own protocol core (asyncio): MBAP and RTU framers, function codes 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 (hex) with standard exception responses.
-- Serial Modbus RTU listener (`type: rtu`, pyserial: COM port, tty or pyserial URL) with t3.5 / t1.5 frame timing (`strict_timing`), broadcast and 248-255 address handling; a port that cannot be opened marks only that listener as `error`.
-- Function codes 16 (mask write register), 17 (read/write multiple registers) and 2B / 0E (Read Device Identification, basic / regular / extended / individual, served from `identification`).
-- One listener serves many unit IDs, and one device can be attached to several listeners; `unit_id_mode` `strict` / `any`, `unknown_unit` `ignore` / `exception`.
-- Data types `bool`, `bit`, `uint16`, `int16`, `uint32`, `int32`, `float32`, `uint64`, `int64`, `float64`, `string`, `enum` with byte order / word order (ABCD, CDAB, BADC, DCBA), scale and offset.
+
+**Configuration and templates**
 - YAML configuration (validated with pydantic) with automatic address allocation for template points, per-device undefined-address policy and device identification fields.
-- Behaviors: `sine`, `random`, `random_walk`, `expr`, `follow`, `ramp`, `counter`, `pulse`, `replay` (CSV); min / max clamping, integer counter wrap-around, read-only point protection.
-- Generic device templates: `battery_pcs`, `bms`, `power_meter`, `env_sensor`, `custom`; the demo site config couples PCS, BMS and meter.
-- Web UI: point table with live values over WebSocket, write from the UI, per-point history, Modbus traffic log (trace), statistics; English / Japanese / Simplified Chinese.
-- REST API and WebSocket: `/api/state`, `/api/templates`, `/api/history`, point write, simulation control, config get / put / save, `/api/trace`, `/api/stats`, `/api/version`, `/ws`.
-- CLI: `sme-modbus-sim [run]`, `validate CONFIG`, `templates`.
-- Excel point table: export / blank template / import (sheets `Listeners`, `Devices`, `Points`; `extra` YAML column; Modicon `40001` addresses; errors reported by sheet, row and column).
+- Generic templates `battery_pcs`, `bms`, `power_meter`, `env_sensor`, `custom`.
+- SunSpec templates `sunspec_pv_inverter` / `sunspec_meter`, generated from the public SunSpec model definitions (Apache-2.0; vendored from sunspec/models @ 90b4a33). Not affiliated with, endorsed by, or certified by SunSpec Alliance.
 - User-local templates in `~/.sme-modbus-sim/templates/` (`--templates-dir`, `SME_MODBUS_SIM_TEMPLATES`), reload from the UI, and save a device as a template.
-- Packaging: Windows one-file exe, multi-arch Docker image (amd64 / arm64 / arm/v7) with offline image archives, CI on Linux / Windows / macOS (Python 3.11 - 3.13), documentation site.
+- Excel point table: export / blank template / import (sheets `Listeners`, `Devices`, `Points`; `extra` YAML column; Modicon `40001` addresses; errors reported by sheet, row and column).
+
+**Web UI, API and CLI**
+- Web UI (English / Japanese / Simplified Chinese): point table with live values over WebSocket, write from the UI, per-point history and trend, Modbus traffic log (trace), statistics with push, fault injection, device management (add / edit / delete, enum editing) and a template browser.
+- REST API and WebSocket: `/api/state`, `/api/templates`, `/api/history`, point write, simulation control, config get / put / save, `/api/trace`, `/api/stats`, `/api/faults`, `/api/version`, `/ws`.
+- CLI: `sme-modbus-sim [run]`, `validate CONFIG`, `templates`.
+
+**Packaging**
+- Windows one-file exe, multi-arch Docker image (amd64 / arm64 / arm/v7) with offline image archives, CI on Linux / Windows / macOS (Python 3.11 - 3.13), documentation site.

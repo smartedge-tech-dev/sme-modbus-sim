@@ -31,8 +31,9 @@
 | `env_sensor` | 温度与湿度 |
 | `custom` | 空设备，所有点自行定义 |
 
-参数可用 `sme-modbus-sim templates` 查看。模板为通用的原创定义，不内置任何厂商的寄存器表。由公开的 SunSpec
-模型定义生成的模板计划在 0.2.0 提供（与 SunSpec Alliance 无任何关联，未获其认可或认证）。
+参数可用 `sme-modbus-sim templates` 查看。模板为通用的原创定义，不内置任何厂商的寄存器表。`sunspec_pv_inverter` 与 `sunspec_meter`
+由公开的 SunSpec 模型定义（Apache-2.0）生成，实现 SunSpec Modbus 模型（与 SunSpec Alliance 无任何关联，未获其认可或认证）。
+自有厂商表可通过 [Excel](excel.md) 或用户本地模板私下导入。
 
 
 ## User-local templates

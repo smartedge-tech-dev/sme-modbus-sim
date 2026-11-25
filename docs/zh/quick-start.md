@@ -16,6 +16,26 @@ docker run --rm -p 8080:8080 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-de
 `python -m sme_modbus_sim run -c configs/my.yaml --host 0.0.0.0 --no-browser`。
 容器以非 root 用户运行，因此监听端口须不小于 1024（用 5020，而不是 502）。
 
+## 串口 RTU 与 RTU over TCP
+
+串口 RTU 默认 19200 波特率、8E1（`type: rtu`，`port: COM5` 或 `/dev/ttyUSB0`）。RTU over TCP 在 TCP 端口上提供 RTU 帧，适用于串口网关和 RTU over TCP 模式的主站。
+
+```yaml
+listeners:
+  - {id: com1, type: rtu, port: COM5, baudrate: 19200, parity: E}   # serial RTU, 8E1
+  - {id: gw1, type: rtu_over_tcp, host: 0.0.0.0, port: 5021}        # RTU over TCP
+```
+
+Docker 中用 `--device` 把串口适配器传入容器（Linux 主机；容器以非 root 用户运行，需加入设备所属组）：
+
+```bash
+docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8080:8080 \
+  -v ./serial.yaml:/app/configs/serial.yaml ghcr.io/smartedge-tech-dev/sme-modbus-sim \
+  python -m sme_modbus_sim run -c configs/serial.yaml --host 0.0.0.0 --no-browser
+```
+
+主站示例：`modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6`（串口线另一端），RTU over TCP 用 `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1`。
+
 ## 从源码运行
 
 ```bash

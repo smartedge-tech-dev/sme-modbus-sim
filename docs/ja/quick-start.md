@@ -16,6 +16,26 @@ docker run --rm -p 8080:8080 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-de
 `python -m sme_modbus_sim run -c configs/my.yaml --host 0.0.0.0 --no-browser` を末尾に付けて起動します。
 コンテナーは root 以外のユーザーで動作するため、待ち受けポートは 1024 以上（502 ではなく 5020）にしてください。
 
+## シリアル RTU と RTU over TCP
+
+シリアル RTU は既定で 19200 baud、8E1 です（`type: rtu`、`port: COM5` または `/dev/ttyUSB0`）。RTU over TCP は RTU フレームを TCP ポートで提供し、シリアルゲートウェイや RTU over TCP モードのマスター向けです。
+
+```yaml
+listeners:
+  - {id: com1, type: rtu, port: COM5, baudrate: 19200, parity: E}   # serial RTU, 8E1
+  - {id: gw1, type: rtu_over_tcp, host: 0.0.0.0, port: 5021}        # RTU over TCP
+```
+
+Docker ではシリアルアダプターを `--device` でコンテナーに渡します（Linux ホスト。コンテナーは root 以外で動作するため、デバイスのグループを追加します）:
+
+```bash
+docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8080:8080 \
+  -v ./serial.yaml:/app/configs/serial.yaml ghcr.io/smartedge-tech-dev/sme-modbus-sim \
+  python -m sme_modbus_sim run -c configs/serial.yaml --host 0.0.0.0 --no-browser
+```
+
+マスター側: `modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6`（シリアル接続の相手側）、RTU over TCP は `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1`。
+
 ## ソースから実行
 
 ```bash

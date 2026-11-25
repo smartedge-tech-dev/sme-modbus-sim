@@ -33,8 +33,9 @@ Modbus マスターや UI から書き込まれた値は、データ型、`min` 
 | `custom` | 空のデバイス。ポイントはすべて自分で定義します |
 
 パラメーターは `sme-modbus-sim templates` で確認できます。テンプレートは汎用の独自定義で、特定メーカーのレジスタマップは
-内蔵していません。公開されている SunSpec モデル定義から生成したテンプレートは 0.2.0 で提供予定です
-（SunSpec Alliance とは提携・推奨・認証の関係にありません）。
+内蔵していません。`sunspec_pv_inverter` と `sunspec_meter` は公開されている SunSpec モデル定義（Apache-2.0）から生成した、
+SunSpec Modbus モデルを実装するテンプレートです（SunSpec Alliance とは提携・推奨・認証の関係にありません）。
+お手元のメーカーマップは [Excel](excel.md) またはユーザーローカルテンプレートで非公開のまま取り込めます。
 
 
 ## User-local templates

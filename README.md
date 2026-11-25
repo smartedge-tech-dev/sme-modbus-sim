@@ -7,16 +7,18 @@ sensors — or any register map you describe in YAML — and watch the values ch
 Modbus master (your EMS, a gateway, modpoll, pymodbus…) reads and writes them.
 
 - **Many devices, one port.** One listener serves many unit IDs; a device can also be attached to several listeners.
-  Modbus TCP and Modbus RTU over TCP (for serial gateways) are supported side by side.
-- **Own protocol core.** Function codes 01, 02, 03, 04, 05, 06, 0F and 10 (hex) with standard exception responses.
+  Modbus TCP, Modbus RTU over TCP (for serial gateways) and serial RTU (COM port / tty) are supported side by side.
+- **Own protocol core.** Function codes 01, 02, 03, 04, 05, 06, 0F, 10, 16, 17 and 2B/0E (hex) with standard exception responses.
   Modbus TCP / RTU compatible framing (MBAP and CRC-16).
 - **All the data types.** `bool`, `int16` / `uint16`, `int32` / `uint32`, `int64` / `uint64`, `float32` / `float64`,
   `string`, `enum`, bit-in-register, with byte order and word order (ABCD / CDAB / BADC / DCBA), scale and offset.
 - **Realistic behavior.** A PCS ramps toward its power set point, the BMS integrates SOC from the PCS power, the
   meter shows site load minus PCS power. Sine, random walk, expressions, counters, pulses and CSV replay.
 - **Live UI.** Point table with live values over WebSocket, write from the browser, history per point, a Modbus
-  traffic log. English, Japanese and Simplified Chinese.
-- **Configurable.** Edit YAML, add devices from generic templates, save back to the config file.
+  traffic log, statistics push. English, Japanese and Simplified Chinese.
+- **Templates.** Generic battery PCS / BMS / meter / sensor templates, SunSpec PV inverter and meter templates, user-local templates, and "save device as template".
+- **Fault injection.** Delay, no response, exceptions, bad CRC, disconnects and more, from the UI, REST or presets.
+- **Configurable.** Edit YAML or an Excel point list, manage devices and browse templates in the UI, save back to the config file.
 
 Built on an asyncio protocol core written for this project, FastAPI and pyserial. No front-end build step.
 
@@ -39,6 +41,26 @@ docker run --rm -p 8080:8080 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-de
 Images are published for `linux/amd64`, `linux/arm64` and `linux/arm/v7`. Offline archives
 (`docker load -i`) are attached to each release. Set `-e TZ=Asia/Tokyo` for a local clock (default UTC).
 To use your own config: `-v ./my.yaml:/app/configs/my.yaml ... -c configs/my.yaml`.
+
+### Serial RTU and RTU over TCP
+
+Serial RTU defaults to 19200 baud, 8E1 (`type: rtu`, `port: COM5` or `/dev/ttyUSB0`). RTU over TCP serves RTU frames on a TCP port, for serial gateways and masters in RTU-over-TCP mode.
+
+```yaml
+listeners:
+  - {id: com1, type: rtu, port: COM5, baudrate: 19200, parity: E}   # serial RTU, 8E1
+  - {id: gw1, type: rtu_over_tcp, host: 0.0.0.0, port: 5021}        # RTU over TCP
+```
+
+Pass the serial adapter into the container with `--device` (Linux hosts; the container runs as a non-root user, so add the device group):
+
+```bash
+docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8080:8080 \
+  -v ./serial.yaml:/app/configs/serial.yaml ghcr.io/smartedge-tech-dev/sme-modbus-sim \
+  python -m sme_modbus_sim run -c configs/serial.yaml --host 0.0.0.0 --no-browser
+```
+
+Masters: `modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6` (the other end of the serial link) and `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1` (RTU over TCP).
 
 ### From source / pip
 
@@ -83,14 +105,16 @@ client.close()
 
 ## Roadmap
 
-- **0.1.0** — Modbus TCP and RTU over TCP, FC 01–06 / 0F / 10, all data types, YAML, web UI, generic templates,
-  Windows exe, Docker, CI.
-- **0.2.0** — serial RTU (COM port / `/dev/ttyUSB*`), FC 16 mask write register, FC 17 read/write multiple
-  registers, FC 2B/0E read device identification, fault injection UI (delay, drop, exceptions, wrong CRC),
-  Excel point-list import / export, user-local templates, and templates generated from the public SunSpec
-  model definitions.
+Everything below is in 0.1.0 (not yet released): Modbus TCP, RTU over TCP and serial RTU; function codes
+01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E; fault injection (UI, REST, presets); Excel point-list
+import / export; user-local templates and "save device as template"; generic and SunSpec PV inverter / meter
+templates; web UI with device management and a template browser; Windows exe, multi-arch Docker, offline archives.
 
-> Not affiliated with, endorsed by, or certified by SunSpec Alliance. SunSpec templates: `sunspec_pv_inverter` (models 1, 103, 120-123, 160) and `sunspec_meter` (models 1, 203), generated from the public SunSpec model definitions (Apache-2.0).
+Possible future work: Modbus ASCII, UDP, the serial diagnostic function codes (07 / 08 / 0B / 0C / 11),
+Modbus/TCP Security (TLS), SunSpec DER and battery models, and scanning / recording real devices to build a
+point list.
+
+> Not affiliated with, endorsed by, or certified by SunSpec Alliance. The `sunspec_pv_inverter` (models 1, 103, 120-123, 160) and `sunspec_meter` (models 1, 203) templates are generated from the public SunSpec model definitions (Apache-2.0) and implement SunSpec Modbus models. No vendor register maps are built in; import your own privately via Excel or user-local templates.
 
 ## Commercial support & custom development
 

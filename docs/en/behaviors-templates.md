@@ -33,8 +33,9 @@ the same name in the device override the template's.
 | `custom` | Empty device, define all points yourself |
 
 `sme-modbus-sim templates` lists the parameters. The templates are generic and original; no vendor register maps
-are built in. Templates generated from the public SunSpec model definitions are planned for 0.2.0 (not affiliated
-with, endorsed by, or certified by SunSpec Alliance).
+are built in. `sunspec_pv_inverter` and `sunspec_meter` are generated from the public SunSpec model definitions (Apache-2.0) and
+implement SunSpec Modbus models (not affiliated with, endorsed by, or certified by SunSpec Alliance). Import your own
+vendor maps privately via [Excel](excel.md) or user-local templates.
 
 
 ## User-local templates

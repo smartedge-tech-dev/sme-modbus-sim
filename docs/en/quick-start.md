@@ -17,6 +17,26 @@ Images exist for `linux/amd64`, `linux/arm64` and `linux/arm/v7`. Set `-e TZ=Asi
 `python -m sme_modbus_sim run -c configs/my.yaml --host 0.0.0.0 --no-browser`. The container runs as a non-root
 user, so listen on ports of 1024 or above (5020, not 502).
 
+## Serial RTU and RTU over TCP
+
+Serial RTU defaults to 19200 baud, 8E1 (`type: rtu`, `port: COM5` or `/dev/ttyUSB0`). RTU over TCP serves RTU frames on a TCP port, for serial gateways and masters in RTU-over-TCP mode.
+
+```yaml
+listeners:
+  - {id: com1, type: rtu, port: COM5, baudrate: 19200, parity: E}   # serial RTU, 8E1
+  - {id: gw1, type: rtu_over_tcp, host: 0.0.0.0, port: 5021}        # RTU over TCP
+```
+
+Pass the serial adapter into the container with `--device` (Linux hosts; the container runs as a non-root user, so add the device group):
+
+```bash
+docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8080:8080 \
+  -v ./serial.yaml:/app/configs/serial.yaml ghcr.io/smartedge-tech-dev/sme-modbus-sim \
+  python -m sme_modbus_sim run -c configs/serial.yaml --host 0.0.0.0 --no-browser
+```
+
+Masters: `modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6` (the other end of the serial link) and `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1` (RTU over TCP).
+
 ## From source
 
 ```bash
