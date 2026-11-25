@@ -1,0 +1,147 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish_pypi:
+        description: "Publish to PyPI (needs trusted publishing configured on PyPI first)"
+        type: boolean
+        default: false
+      image_archives_version:
+        description: "Re-export the offline image archives of an already pushed version (e.g. 0.2.0) to release v<version>"
+        type: string
+        default: ""
+
+jobs:
+  windows-exe:
+    if: github.event_name == 'push'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt pyinstaller
+      - run: pyinstaller packaging/sme-modbus-sim.spec --noconfirm
+      - name: Rename artifact with version
+        shell: bash
+        run: mv dist/sme-modbus-sim.exe "dist/sme-modbus-sim-${GITHUB_REF_NAME}-windows.exe"
+      - name: Extract release notes from CHANGELOG.md
+        id: notes
+        shell: bash
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v ver="$ver" '
+            /^## \[/ { if (found) exit; if (index($0, "## [" ver "]") == 1) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if grep -q '[^[:space:]]' release-notes.md; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No CHANGELOG.md section for $ver; falling back to generated notes"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/sme-modbus-sim-*-windows.exe
+          body_path: ${{ steps.notes.outputs.found == 'true' && 'release-notes.md' || '' }}
+          generate_release_notes: ${{ steps.notes.outputs.found != 'true' }}
+
+  docker:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/smartedge-tech-dev/sme-modbus-sim
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+      # One manifest list per tag: amd64, arm64 and arm/v7 (e.g. Moxa gateways)
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # Offline image archives (docker load -i reads .tar.gz directly). Each one is the
+      # single-architecture image that was just pushed, tagged $IMAGE:<ver>, so commands after
+      # `docker load` are the same as after `docker pull`.
+      - name: Export offline image archives
+        run: sh packaging/export-image-archives.sh "$IMAGE" "${{ steps.meta.outputs.version }}" images
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: images/*.tar.gz
+          compression-level: 0
+          retention-days: 3
+
+  # Uploads the offline image archives after windows-exe has created the release with its notes,
+  # so the release body is never created empty by this job.
+  docker-release-assets:
+    needs: [windows-exe, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+          path: images
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: images/*.tar.gz
+
+  # Manual re-export of the offline image archives for a release whose docker job failed after the push.
+  image-archives:
+    if: github.event_name == 'workflow_dispatch' && inputs.image_archives_version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      IMAGE: ghcr.io/smartedge-tech-dev/sme-modbus-sim
+      VERSION: ${{ inputs.image_archives_version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh packaging/export-image-archives.sh "$IMAGE" "$VERSION" images
+      - run: gh release upload "v$VERSION" images/*.tar.gz --clobber
+
+  # PyPI is disabled for now: it only runs when started manually with
+  # publish_pypi=true, after a trusted publisher is registered on PyPI
+  # (project sme-modbus-sim, workflow release.yml, environment "pypi").
+  pypi:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_pypi
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build && python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1
