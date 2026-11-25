@@ -35,11 +35,17 @@ jobs:
         id: notes
         shell: bash
         run: |
+          # v0.1.0-rc1 uses the [0.1.0] section, or [Unreleased] before the final heading exists
           ver="${GITHUB_REF_NAME#v}"
-          awk -v ver="$ver" '
-            /^## \[/ { if (found) exit; if (index($0, "## [" ver "]") == 1) { found = 1; next } }
-            found { print }
-          ' CHANGELOG.md > release-notes.md
+          ver="${ver%%-*}"
+          section() {
+            awk -v head="$1" '
+              /^## \[/ { if (found) exit; if (index($0, "## [" head "]") == 1) { found = 1; next } }
+              found { print }
+            ' CHANGELOG.md
+          }
+          section "$ver" > release-notes.md
+          grep -q '[^[:space:]]' release-notes.md || section "Unreleased" > release-notes.md
           if grep -q '[^[:space:]]' release-notes.md; then
             echo "found=true" >> "$GITHUB_OUTPUT"
           else
@@ -51,6 +57,7 @@ jobs:
           files: dist/sme-modbus-sim-*-windows.exe
           body_path: ${{ steps.notes.outputs.found == 'true' && 'release-notes.md' || '' }}
           generate_release_notes: ${{ steps.notes.outputs.found != 'true' }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   docker:
     if: github.event_name == 'push'
@@ -75,7 +82,8 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=latest
+            # a pre-release tag (v0.1.0-rc1) never moves latest
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
       # One manifest list per tag: amd64, arm64 and arm/v7 (e.g. Moxa gateways)
       - uses: docker/build-push-action@v6
         with:
@@ -113,6 +121,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: images/*.tar.gz
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   # Manual re-export of the offline image archives for a release whose docker job failed after the push.
   image-archives:

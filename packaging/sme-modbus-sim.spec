@@ -12,6 +12,7 @@ datas = [
     (os.path.join(root, "sme_modbus_sim", "data", "sunspec"), "sme_modbus_sim/data/sunspec"),
     # __main__ resolves configs/ relative to the package parent directory
     (os.path.join(root, "configs", "demo-site.yaml"), "configs"),
+    (os.path.join(root, "configs", "demo-coupled-site.yaml"), "configs"),
 ]
 
 hiddenimports = ["serial"]  # pyserial (RTU listeners), imported lazily
