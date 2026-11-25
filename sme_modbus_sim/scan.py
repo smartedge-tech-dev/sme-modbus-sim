@@ -510,13 +510,16 @@ def to_template(result: Dict[str, Any], edits: Optional[List[Dict[str, Any]]] = 
                 title: Optional[str] = None, description: Optional[str] = None) -> Dict[str, Any]:
     """User-template dict ``{name, title, description, params, points}`` (sme_sim_common user template format).
 
-    The template format has no ``identification`` key, so the device identification goes into the
-    description only (``to_device`` sets it on the device)."""
+    The scanned device identification is kept as the template's ``identification`` (an extra key the
+    registry merges into devices built from it) and summarised in the description."""
     ident = _ident_text(result.get("identification"))
     desc = description or (f"Scanned from {result.get('target')} unit {result.get('unit')}"
                            + (f" ({ident})" if ident else ""))
-    return {"name": name, "title": title or (ident or name), "description": desc, "params": {},
-            "points": to_points(result, edits)}
+    out = {"name": name, "title": title or (ident or name), "description": desc, "params": {},
+           "points": to_points(result, edits)}
+    if result.get("identification"):
+        out["identification"] = dict(result["identification"])
+    return out
 
 
 def to_device(result: Dict[str, Any], edits: Optional[List[Dict[str, Any]]] = None, *, name: str,

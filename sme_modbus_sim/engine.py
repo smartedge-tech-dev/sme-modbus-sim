@@ -36,7 +36,7 @@ from sme_sim_common.engine import BaseEngine
 
 from . import __version__
 from .behaviors import Behavior, ident, make_behavior
-from .config import BIT_TABLES, DeviceConfig, PointConfig, SimConfig, dump_yaml, register_count
+from .config import BIT_TABLES, DeviceConfig, IdentificationConfig, PointConfig, SimConfig, dump_yaml, register_count
 from .faults import FaultManager
 from .protocol import datatypes as dtypes
 from .protocol.constants import ExceptionCode
@@ -44,6 +44,7 @@ from .protocol.errors import ModbusError
 from .protocol.serial_server import ModbusSerialServer
 from .protocol.server import ModbusTcpServer, TraceEvent
 from .protocol.store import UnitStore
+from . import templates as tpl
 from .templates import expand_device
 
 
@@ -245,8 +246,12 @@ _IDENT_OBJECTS = ("vendor_name", "product_code", "revision", "vendor_url", "prod
 
 
 def identification_objects(cfg: DeviceConfig) -> Dict[int, str]:
-    """FC2B/0E objects of a device; the three mandatory basic objects always exist."""
-    ident = cfg.identification
+    """FC2B/0E objects of a device; the three mandatory basic objects always exist.
+
+    Template ``identification`` defaults are merged under the device's own fields (device values win)."""
+    own = {"identification": cfg.identification.model_dump(exclude_none=True)} if cfg.identification else {}
+    merged = tpl.registry.expand_extras(cfg.name, cfg.template, cfg.params or {}, own).get("identification")
+    ident = IdentificationConfig.model_validate(merged) if merged else None
     out: Dict[int, str] = {}
     for oid, field in enumerate(_IDENT_OBJECTS):
         v = getattr(ident, field) if ident is not None else None

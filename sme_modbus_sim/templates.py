@@ -73,7 +73,8 @@ def _export(dev: DeviceConfig, d: Pt) -> Pt:
 
 
 registry: TemplateRegistry[PointConfig] = TemplateRegistry(
-    PointConfig, _validate, app_name=APP_NAME, finalize_hook=_finalize, export_hook=_export)
+    PointConfig, _validate, app_name=APP_NAME, finalize_hook=_finalize, export_hook=_export,
+    extra_keys=("identification",))  # templates may carry FC2B/0E identification defaults
 template = registry.template  # decorator: @template(name, title, params, description=None)
 TEMPLATES: Dict[str, Dict[str, Any]] = registry.builtins  # same dict objects as the registry's (live views)
 USER_TEMPLATES: Dict[str, Dict[str, Any]] = registry.user_templates
