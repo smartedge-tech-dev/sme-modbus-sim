@@ -3,12 +3,12 @@
 ## Windows exe
 
 [Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases) から
-`sme-modbus-sim-<version>-windows.exe` をダウンロードして実行します。ブラウザで <http://127.0.0.1:8080/> が開きます。
+`sme-modbus-sim-<version>-windows.exe` をダウンロードして実行します。ブラウザで <http://127.0.0.1:8081/> が開きます。
 
 ## Docker
 
 ```bash
-docker run --rm -p 8080:8080 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-dev/sme-modbus-sim
+docker run --rm -p 8081:8081 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-dev/sme-modbus-sim
 ```
 
 イメージは `linux/amd64`、`linux/arm64`、`linux/arm/v7` 向けです。ローカル時刻を使うには `-e TZ=Asia/Tokyo` を指定します
@@ -29,7 +29,7 @@ listeners:
 Docker ではシリアルアダプターを `--device` でコンテナーに渡します（Linux ホスト。コンテナーは root 以外で動作するため、デバイスのグループを追加します）:
 
 ```bash
-docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8080:8080 \
+docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
   -v ./serial.yaml:/app/configs/serial.yaml ghcr.io/smartedge-tech-dev/sme-modbus-sim \
   python -m sme_modbus_sim run -c configs/serial.yaml --host 0.0.0.0 --no-browser
 ```
@@ -51,7 +51,7 @@ Python 3.11 以上が必要です。オプション:
 | `sme-modbus-sim [run]` | シミュレーターを起動します（`run` は省略可） |
 | `-c, --config FILE` | YAML 設定ファイル（既定: `configs/demo-site.yaml`） |
 | `--host 0.0.0.0` | Web UI のバインドアドレス（既定はローカルホストのみ） |
-| `--http-port 8080` | Web UI のポート |
+| `--http-port 8081` | Web UI のポート |
 | `--no-browser` | ブラウザを開きません |
 | `validate CONFIG` | 設定ファイルを検証して終了します |
 | `templates` | デバイステンプレートを一覧表示します |

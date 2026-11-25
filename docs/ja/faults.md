@@ -63,9 +63,9 @@ Web UI（下部ペインの **故障注入** タブ）または REST API で管�
 CI スクリプトからの読み込み：
 
 ```bash
-curl -X POST --data-binary @faults/meter-flaky.yaml http://127.0.0.1:8080/api/faults/preset
+curl -X POST --data-binary @faults/meter-flaky.yaml http://127.0.0.1:8081/api/faults/preset
 # ... シミュレータに対して試験を実行 ...
-curl -X POST http://127.0.0.1:8080/api/faults/clear
+curl -X POST http://127.0.0.1:8081/api/faults/clear
 ```
 
 `POST /api/faults/preset` は全ルールを置き換えます（追加は `?replace=false`）。1 件でも不正なら

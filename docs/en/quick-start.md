@@ -4,12 +4,12 @@
 
 Download `sme-modbus-sim-<version>-windows.exe` from the
 [Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases) page and run it. The browser opens
-the UI at <http://127.0.0.1:8080/>.
+the UI at <http://127.0.0.1:8081/>.
 
 ## Docker
 
 ```bash
-docker run --rm -p 8080:8080 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-dev/sme-modbus-sim
+docker run --rm -p 8081:8081 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-dev/sme-modbus-sim
 ```
 
 Images exist for `linux/amd64`, `linux/arm64` and `linux/arm/v7`. Set `-e TZ=Asia/Tokyo` for a local clock
@@ -30,7 +30,7 @@ listeners:
 Pass the serial adapter into the container with `--device` (Linux hosts; the container runs as a non-root user, so add the device group):
 
 ```bash
-docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8080:8080 \
+docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
   -v ./serial.yaml:/app/configs/serial.yaml ghcr.io/smartedge-tech-dev/sme-modbus-sim \
   python -m sme_modbus_sim run -c configs/serial.yaml --host 0.0.0.0 --no-browser
 ```
@@ -52,7 +52,7 @@ Python 3.11 or newer. Options:
 | `sme-modbus-sim [run]` | Start the simulator (`run` is the default) |
 | `-c, --config FILE` | YAML config (defaults to `configs/demo-site.yaml`) |
 | `--host 0.0.0.0` | Web UI bind address (default localhost only) |
-| `--http-port 8080` | Web UI port |
+| `--http-port 8081` | Web UI port |
 | `--no-browser` | Do not open the browser |
 | `validate CONFIG` | Check a config file and exit |
 | `templates` | List the device templates |

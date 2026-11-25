@@ -61,9 +61,9 @@
 在 CI 脚本中加载：
 
 ```bash
-curl -X POST --data-binary @faults/meter-flaky.yaml http://127.0.0.1:8080/api/faults/preset
+curl -X POST --data-binary @faults/meter-flaky.yaml http://127.0.0.1:8081/api/faults/preset
 # ... 对模拟器运行测试 ...
-curl -X POST http://127.0.0.1:8080/api/faults/clear
+curl -X POST http://127.0.0.1:8081/api/faults/clear
 ```
 
 `POST /api/faults/preset` 替换全部规则（追加用 `?replace=false`），且全有或全无：只要有一条无效就不做任何改动。

@@ -1,6 +1,6 @@
 # HTTP API
 
-The web UI uses this API; you can script against it too. All routes are served on the UI port (default 8080).
+The web UI uses this API; you can script against it too. All routes are served on the UI port (default 8081).
 
 | Method | Path | Description |
 |---|---|---|
@@ -18,7 +18,7 @@ The web UI uses this API; you can script against it too. All routes are served o
 | WS | `/ws` | Live stream of value changes, trace entries and events |
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/devices/PCS-1/points/p_setpoint/write \
+curl -X POST http://127.0.0.1:8081/api/devices/PCS-1/points/p_setpoint/write \
      -H "Content-Type: application/json" -d '{"value": 20}'
 ```
 

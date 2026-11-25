@@ -1,6 +1,6 @@
 # HTTP API
 
-Web UI 使用的就是这套 API，你也可以用脚本调用。所有路由都在 UI 端口（默认 8080）上提供。
+Web UI 使用的就是这套 API，你也可以用脚本调用。所有路由都在 UI 端口（默认 8081）上提供。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -18,7 +18,7 @@ Web UI 使用的就是这套 API，你也可以用脚本调用。所有路由都
 | WS | `/ws` | 数值变化、通信记录和事件的实时推送 |
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/devices/PCS-1/points/p_setpoint/write \
+curl -X POST http://127.0.0.1:8081/api/devices/PCS-1/points/p_setpoint/write \
      -H "Content-Type: application/json" -d '{"value": 20}'
 ```
 

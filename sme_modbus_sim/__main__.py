@@ -1,6 +1,6 @@
 """Command line entry point.
 
-  sme-modbus-sim [run] [-c CONFIG] [--host 127.0.0.1] [--http-port 8080] [--no-browser]
+  sme-modbus-sim [run] [-c CONFIG] [--host 127.0.0.1] [--http-port 8081] [--no-browser]
   sme-modbus-sim validate CONFIG
   sme-modbus-sim templates [--templates-dir DIR]
 
@@ -86,7 +86,7 @@ def main(argv=None) -> int:
     ap.add_argument("--version", action="version", version=f"SME ModbusSim {__version__}")
     ap.add_argument("-c", "--config", help="YAML/JSON config file (default: bundled configs/demo-site.yaml)")
     ap.add_argument("--host", default="127.0.0.1", help="web UI host (use 0.0.0.0 to expose on the LAN)")
-    ap.add_argument("--http-port", type=int, default=8080, help="web UI port")
+    ap.add_argument("--http-port", type=int, default=8081, help="web UI port")
     ap.add_argument("--no-browser", action="store_true", help="do not open the web UI in a browser")
     _tdir_arg(ap)
     ap.add_argument("-v", "--verbose", action="store_true")

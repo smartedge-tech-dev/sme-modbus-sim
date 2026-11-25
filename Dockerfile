@@ -39,6 +39,6 @@ RUN useradd --create-home --uid 10001 sim && chown -R sim /app
 USER sim
 
 # Web UI, Modbus TCP, Modbus RTU over TCP (demo config)
-EXPOSE 8080/tcp 5020/tcp 5021/tcp
+EXPOSE 8081/tcp 5020/tcp 5021/tcp
 
-CMD ["python", "-m", "sme_modbus_sim", "run", "-c", "configs/demo-site.yaml", "--host", "0.0.0.0", "--http-port", "8080", "--no-browser"]
+CMD ["python", "-m", "sme_modbus_sim", "run", "-c", "configs/demo-site.yaml", "--host", "0.0.0.0", "--http-port", "8081", "--no-browser"]

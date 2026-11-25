@@ -1,6 +1,6 @@
 # HTTP API
 
-Web UI はこの API を利用しており、スクリプトからも呼び出せます。すべてのルートは UI のポート（既定 8080）で提供されます。
+Web UI はこの API を利用しており、スクリプトからも呼び出せます。すべてのルートは UI のポート（既定 8081）で提供されます。
 
 | メソッド | パス | 内容 |
 |---|---|---|
@@ -18,7 +18,7 @@ Web UI はこの API を利用しており、スクリプトからも呼び出�
 | WS | `/ws` | 値の変化、通信ログ、イベントのライブストリーム |
 
 ```bash
-curl -X POST http://127.0.0.1:8080/api/devices/PCS-1/points/p_setpoint/write \
+curl -X POST http://127.0.0.1:8081/api/devices/PCS-1/points/p_setpoint/write \
      -H "Content-Type: application/json" -d '{"value": 20}'
 ```
 

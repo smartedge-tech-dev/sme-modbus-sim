@@ -21,12 +21,12 @@ SME ModbusSim 免费且采用 MIT 许可，由 [smart-edge（智届科技）](ht
 
 ### Windows exe
 
-从 [Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases) 下载 `sme-modbus-sim-<version>-windows.exe` 并运行，浏览器会打开 http://127.0.0.1:8080/ 。
+从 [Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases) 下载 `sme-modbus-sim-<version>-windows.exe` 并运行，浏览器会打开 http://127.0.0.1:8081/ 。
 
 ### Docker
 
 ```bash
-docker run --rm -p 8080:8080 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-dev/sme-modbus-sim
+docker run --rm -p 8081:8081 -p 5020:5020 -p 5021:5021 ghcr.io/smartedge-tech-dev/sme-modbus-sim
 ```
 
 镜像提供 `linux/amd64`、`linux/arm64` 和 `linux/arm/v7`。每个发布版本都附带离线镜像包（`docker load -i`）。使用本地时间请加 `-e TZ=Asia/Tokyo`（默认 UTC）。使用自己的配置：`-v ./my.yaml:/app/configs/my.yaml ... -c configs/my.yaml`。
@@ -44,7 +44,7 @@ listeners:
 Docker 中用 `--device` 把串口适配器传入容器（Linux 主机；容器以非 root 用户运行，需加入设备所属组）：
 
 ```bash
-docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8080:8080 \
+docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
   -v ./serial.yaml:/app/configs/serial.yaml ghcr.io/smartedge-tech-dev/sme-modbus-sim \
   python -m sme_modbus_sim run -c configs/serial.yaml --host 0.0.0.0 --no-browser
 ```
@@ -59,14 +59,14 @@ python -m venv .venv
 .venv/bin/python -m sme_modbus_sim run -c configs/demo-site.yaml
 ```
 
-打开 http://127.0.0.1:8080/ 。需要 Python 3.11 或更高版本。
+打开 http://127.0.0.1:8081/ 。需要 Python 3.11 或更高版本。
 
 | 命令 / 选项 | 含义 |
 |---|---|
 | `sme-modbus-sim [run]` | 启动模拟器（`run` 可省略） |
 | `-c, --config FILE` | YAML 配置文件（默认 `configs/demo-site.yaml`） |
 | `--host 0.0.0.0` | Web UI 绑定地址（默认仅本机） |
-| `--http-port 8080` | Web UI 端口 |
+| `--http-port 8081` | Web UI 端口 |
 | `--no-browser` | 不自动打开浏览器 |
 | `validate CONFIG` | 校验配置文件后退出 |
 | `templates` | 列出设备模板 |
