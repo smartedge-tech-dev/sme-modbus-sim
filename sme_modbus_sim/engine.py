@@ -24,7 +24,6 @@ Value model:
 from __future__ import annotations
 
 import asyncio
-import logging
 import math
 import time
 from collections import deque
@@ -47,7 +46,6 @@ from .protocol.server import ModbusTcpServer, TraceEvent
 from .protocol.store import UnitStore
 from .templates import expand_device
 
-log = logging.getLogger("sme_modbus_sim")
 
 TRACE_SIZE = 2000
 EVENT_SIZE = 200
@@ -366,6 +364,8 @@ class ListenerStats:
 class Engine(BaseEngine):
     """Owns the devices, the Modbus listeners and the tick loop. All on one asyncio loop."""
 
+    logger_name = "sme_modbus_sim.engine"
+
     event_size = EVENT_SIZE
     queue_size = QUEUE_SIZE
     stats_interval = STATS_INTERVAL  # seconds between {"type": "stats"} pushes on /ws
@@ -383,7 +383,6 @@ class Engine(BaseEngine):
         self.servers: Dict[str, Any] = {}
         self.devices: Dict[str, DeviceRuntime] = {}
         self._last: Dict[Tuple[str, str], Any] = {}
-        self._scan: Optional[asyncio.Event] = None
         self.faults = FaultManager(self.publish)  # runtime fault rules (design 5.4), survive reloads
         super().__init__(config, config_text=config_text, config_path=config_path,
                          base_dir=base_dir)  # base_dir defaults to the config file's directory
@@ -443,7 +442,6 @@ class Engine(BaseEngine):
 
     # ------------------------------------------------------------ lifecycle
     async def start(self) -> None:
-        self._scan = asyncio.Event()
         self.servers = self._make_servers(self.config, self.devices)
         await self._start_servers(self.servers)
         self._log_listeners(self.servers)
@@ -457,8 +455,6 @@ class Engine(BaseEngine):
                 self.log_event("info", f"listener {lid} ({s.framer}) on {s.endpoint}")
 
     async def stop(self) -> None:
-        self._stopping = True
-        self._kick()
         await super().stop()
         for s in self.servers.values():
             await s.stop()
@@ -488,17 +484,13 @@ class Engine(BaseEngine):
         self.servers = self._make_servers(old_config, old_state)
         await self._start_servers(self.servers)
 
-    def _kick(self) -> None:
-        if self._scan is not None:
-            self._scan.set()
-
     # ---------------------------------------------------------------- trace
     def _on_trace(self, ev: TraceEvent) -> None:
         d = asdict(ev)
         self.trace_buf.append(d)
         self._trace_pending.append(d)
         self.stats.setdefault(ev.listener_id, ListenerStats()).add(ev)
-        self._kick()
+        self.wake()
 
     def trace(self, limit: int = 200, unit: Optional[int] = None, fc: Optional[int] = None,
               listener: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -528,7 +520,7 @@ class Engine(BaseEngine):
             p.value = v
             p.error = None
             self.log_event("write", f"{dev.name}/{p.name} <- {v!r} (Modbus {table} {p.address})")
-        self._kick()
+        self.wake()
 
     # ----------------------------------------------------------------- API
     def _point(self, device: str, point: str) -> PointRuntime:
@@ -546,7 +538,7 @@ class Engine(BaseEngine):
         p.set_value(value, strict=True)
         p.error = None
         self.log_event("write", f"{device}/{point} <- {p.read()!r} (UI)")
-        self._kick()
+        self.wake()
         return p.read()
 
     def history(self, device: str, point: str) -> List[Tuple[float, float]]:
@@ -617,25 +609,3 @@ class Engine(BaseEngine):
 
     def _on_tick(self) -> None:
         self._scan_changes()
-
-    async def _run(self) -> None:
-        """``BaseEngine._run`` plus a wake-up: a protocol write or trace event (``_kick``) pushes values / trace
-        within ~50 ms instead of waiting for the next tick."""
-        loop = asyncio.get_running_loop()
-        nxt = loop.time()
-        while not self._stopping:
-            if loop.time() >= nxt:
-                async with self._lock:
-                    try:
-                        self.tick()
-                    except Exception as e:  # keep the loop alive; surface the error
-                        self.log_event("error", f"tick failed: {type(e).__name__}: {e}")
-                nxt = max(nxt + self.tick_seconds, loop.time())
-            try:
-                await asyncio.wait_for(self._scan.wait(), timeout=max(0.0, nxt - loop.time()))
-                self._scan.clear()
-                await asyncio.sleep(0.05)  # coalesce bursts of writes / trace events
-                async with self._lock:
-                    self._scan_changes()
-            except asyncio.TimeoutError:
-                pass
