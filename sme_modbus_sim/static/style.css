@@ -5,11 +5,19 @@
 /* ---- Product accent: teal (registered in the sme-sim-common README accent table).
    Override only --accent / --accent-ink / --accent-weak: the vendor area uses --vendor-accent
    (fixed brand blue) and must not follow the product accent.
-   Dark-theme values are not decided yet (README: TBD), so the dark theme keeps the shell default;
-   once decided, add the :root[data-theme="dark"] and prefers-color-scheme blocks from
-   sme-sim-common templates/static/style.css. */
+   The three blocks mirror the three token blocks of shell.css and must stay in sync. */
 :root {
   --accent: #0f766e; --accent-ink: #ffffff; --accent-weak: #ccfbf1;
+}
+/* KEEP IN SYNC with the prefers-color-scheme block below. */
+:root[data-theme="dark"] {
+  --accent: #2dd4bf; --accent-ink: #042f2e; --accent-weak: #134e4a;
+}
+/* KEEP IN SYNC with :root[data-theme="dark"] above. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent: #2dd4bf; --accent-ink: #042f2e; --accent-weak: #134e4a;
+  }
 }
 
 /* ------------------------------------------------------------------ header status */
