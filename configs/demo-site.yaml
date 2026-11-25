@@ -1,0 +1,56 @@
+# SME ModbusSim demo site: battery PCS + BMS + grid meter + room sensor.
+#
+# Coupling: PCS-1 p_actual -> BMS-1 soc (integrated) -> PCS-1 SOC limits / dc_voltage;
+#           Meter-1 active_power = site load - PCS-1 p_actual.
+# Addresses are 0-based protocol addresses. Try:
+#   write holding 0 (PCS-1 p_setpoint, int16 x0.1 kW) = 200  -> 20.0 kW discharge
+#   write coil 0 (PCS-1 run_command) = 1
+# Note: quote label strings such as "ON" / "OFF" / "yes" (YAML 1.1 reads them as booleans).
+
+simulation: {tick_seconds: 1, time_scale: 1, history_size: 600, running: true}
+
+listeners:
+  - {id: tcp1, type: tcp, host: 0.0.0.0, port: 5020, unit_id_mode: strict, unknown_unit: ignore}
+  - {id: gw1, type: rtu_over_tcp, host: 0.0.0.0, port: 5021}
+
+devices:
+  - name: PCS-1
+    description: Battery power conversion system
+    unit_id: 1
+    template: battery_pcs
+    params: {rated_kw: 50, rated_kvar: 50, bms_device: BMS-1, ramp_tau_s: 5}
+    identification: {vendor_name: SmartEdge, product_code: SIM-PCS, revision: "0.1"}
+
+  - name: BMS-1
+    description: Battery management system
+    unit_id: 2
+    template: bms
+    params: {capacity_kwh: 100, max_power_kw: 50, initial_soc: 60, pcs_device: PCS-1}
+    identification: {vendor_name: SmartEdge, product_code: SIM-BMS, revision: "0.1"}
+
+  - name: Meter-1
+    description: Grid connection point meter
+    unit_id: 3
+    template: power_meter
+    params: {voltage_v: 230, base_load_kw: 30, pcs_device: PCS-1}
+    word_order: little   # CDAB float32 / uint32, a common meter layout
+    points:
+      - {name: serial_number, value: "MTR00001"}
+
+  - name: Env-1
+    description: Battery room temperature / humidity
+    unit_id: 4
+    listeners: [gw1]     # only reachable through the RTU-over-TCP gateway listener
+    template: env_sensor
+    params: {temperature_c: 24}
+    points:
+      - name: fan_status
+        table: discrete
+        description: Ventilation fan running
+        value: false
+        behavior: {type: expr, expr: "temperature > 26"}
+      - name: mode
+        table: holding
+        datatype: enum
+        labels: {0: "OFF", 1: "ON", 2: "AUTO"}
+        value: 2
