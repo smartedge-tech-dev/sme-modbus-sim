@@ -405,3 +405,82 @@ def test_cli_scan_and_record(tmp_path, capsys):
     assert t.column("hr_20") == [230.5, 230.5]
     tpl.clear_user_templates()
     tpl.load_user_templates(tpl.default_templates_dir())
+
+
+# ---------------------------------------------------------------- reason codes / attach replay
+
+def test_reason_codes_emitted_and_localised():
+    from sme_sim_common.testing import iter_i18n_keys
+    static = Path(sc.__file__).resolve().parent / "static" / "i18n"
+    hi, lo = encode(230.5, "float32"), encode(231.0, "float32")
+    guesses = [sc.guess_float32([hi[0], lo[0]], [hi[1], lo[1]]), sc.guess_float32([hi[0]] * 2, [hi[1]] * 2),
+               sc.guess_int32([0, 0], [5, 6]), sc.guess_string([[0x4142], [0x4344]]), sc.guess_int16([0xFFFB]),
+               sc.guess_bool([0, 1]), sc.guess_bool([1, 1])]
+    guesses += sc.suggest("holding", {0: [7, 7], 1: [9, 9]}) + sc.suggest("holding", {0: [3, 3]})
+    emitted = {g["reason_code"] for g in guesses if g}
+    assert emitted <= set(sc.REASON_CODES) and {"default", "ascii_run", "int16_negative"} <= emitted
+    assert all(isinstance(g["reason_params"], dict) and g["reason"] for g in guesses if g)
+    for lang in ("en", "ja", "zh"):
+        keys = {k.key for k in iter_i18n_keys(static / f"{lang}.js")}
+        assert {f"scan.reason.{c}" for c in sc.REASON_CODES} <= keys, lang
+
+
+def _record(c, **src):
+    port = c.engine.servers["tcp1"].bound_port
+    body = {"target": {"type": "tcp", "host": "127.0.0.1", "port": port}, "unit": 1, "period": 0.1,
+            "duration": 0.2, "rate": 100, "file": "rec.csv", **src}
+    r = c.post("/api/record/start", json=body)
+    assert r.status_code == 200, r.text
+    job = wait_job(c)
+    assert job["state"] == "done", job
+    return job["result"]
+
+
+def test_rest_attach_replay(client):
+    assert client.post("/api/scan/apply/replay", json={}).status_code == 409
+    res = _record(client, device="D")
+    path = Path(res["path"])
+    assert res["missing_first"] == [] and path.parent == client.path.parent
+    lines = path.read_text(encoding="utf-8").splitlines()  # make the played values recognisable
+    path.write_text("\n".join([lines[0], *[f"{l.split(',')[0]},42,7,1.5" for l in lines[1:]]]) + "\n",
+                    encoding="utf-8")
+    dry = client.post("/api/scan/apply/replay", json={"dry_run": True}).json()
+    assert dry["device"] == "D" and dry["points"] == ["sp", "ro", "elapsed"] and dry["file"] == "rec.csv"
+    assert dry["replaced"] == [{"point": "elapsed", "previous_behavior": {"type": "expr", "expr": "t + 10"}}]
+    assert next(d for d in client.engine.config.devices if d.name == "D").points[0].behavior is None
+    assert client.post("/api/scan/apply/replay", json={"loop": "yes"}).status_code == 400
+    r = client.post("/api/scan/apply/replay", json={"loop": False})
+    assert r.status_code == 200, r.text
+    dev = next(d for d in client.engine.config.devices if d.name == "D")
+    assert dev.points[0].behavior == {"type": "replay", "file": "rec.csv", "column": "sp", "loop": False}
+    time.sleep(0.4)
+    pts = client.engine.devices["D"].by_name
+    assert pts["sp"].value == 42 and pts["elapsed"].value == 1.5
+    assert client.post("/api/scan/apply/replay", json={"device": "nope"}).status_code == 400
+
+
+def test_rest_attach_replay_template_source(client, tmp_path):
+    (tmp_path / "tpl").mkdir(exist_ok=True)
+    (tmp_path / "tpl" / "rec_tpl.yaml").write_text(
+        "name: rec_tpl\ntitle: rec\npoints:\n  - {name: sp, table: holding, address: 0, datatype: int16}\n",
+        encoding="utf-8")
+    tpl.load_user_templates(tmp_path / "tpl")
+    _record(client, template="rec_tpl")
+    r = client.post("/api/scan/apply/replay", json={})
+    assert r.status_code == 400 and "rec_tpl" in r.json()["detail"]
+    r = client.post("/api/scan/apply/replay", json={"device": "D"})
+    assert r.status_code == 200, r.text
+    assert r.json()["points"] == ["sp"] and r.json()["replaced"] == []
+    # a column the target device does not have
+    _record(client, points=[{"name": "other", "table": "holding", "address": 0, "datatype": "int16"}])
+    r = client.post("/api/scan/apply/replay", json={"device": "D"})
+    assert r.status_code == 400 and "other" in r.json()["detail"]
+
+
+def test_rest_attach_replay_refuses_empty_first_row(client):
+    res = _record(client, points=[{"name": "sp", "table": "holding", "address": 0, "datatype": "int16"},
+                                  {"name": "ro", "table": "input", "address": 900}])
+    assert res["missing_first"] == ["ro"]
+    r = client.post("/api/scan/apply/replay", json={"device": "D"})
+    assert r.status_code == 400 and "ro" in r.json()["detail"] and "first row" in r.json()["detail"]
+    assert next(d for d in client.engine.config.devices if d.name == "D").points[0].behavior is None

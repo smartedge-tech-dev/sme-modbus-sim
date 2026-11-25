@@ -1183,6 +1183,7 @@ function renderJob() {
   if (!scan && res) {
     $("jbPath").textContent = t("rec.saved", { path: res.path, rows: res.rows });
     $("jbWarn").innerHTML = (res.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+    $("jbReplay").hidden = j.state === "running" || !res.rows;
   }
 }
 
@@ -1211,11 +1212,18 @@ function renderPreview(j) {
       <td>${bit ? "" : `<input type="number" class="sc sm" step="any" value="1">`}</td>
       <td>${bit ? "" : `<input type="text" class="un sm" spellcheck="false">`}</td>
       <td class="num${low ? " low" : ""}"${low ? ` title="${esc(t("scan.conf.low"))}"` : ""}>${conf}%</td>
-      <td class="why" title="${esc(s.reason)}">${esc(s.reason)}</td></tr>`;
+      <td class="why" title="${esc(reasonText(s))}">${esc(reasonText(s))}</td></tr>`;
   }).join("");
   const base = `scanned_${String(res.target).replace(/[^A-Za-z0-9]+/g, "_")}_u${res.unit}`.replace(/_+/g, "_");
   if (!$("jbTplName").value) $("jbTplName").value = base;
   if (!$("jbDevName").value) $("jbDevName").value = base;
+}
+
+// Localised guess reason (scan.reason.<reason_code> with reason_params); the English ``reason`` is the fallback.
+function reasonText(s) {
+  if (!s.reason_code) return s.reason || "";
+  const key = `scan.reason.${s.reason_code}`, txt = t(key, s.reason_params || {});
+  return txt === key ? s.reason || "" : txt;
 }
 
 function scanEdits() {
@@ -1265,6 +1273,53 @@ async function applyDevice() {
   } catch (e) { $("jbErr").textContent = e.message; }
 }
 
+// ---- attach the recorded CSV as replay behaviors (POST /api/scan/apply/replay; dry_run previews)
+function replayBody() {
+  const body = { loop: $("rpLoop").checked };
+  if ($("rpDevice").value) body.device = $("rpDevice").value;
+  return body;
+}
+
+async function previewReplay() {
+  $("rpErr").textContent = ""; $("rpPoints").textContent = ""; $("rpRepHead").textContent = ""; $("rpReplaced").innerHTML = "";
+  $("rpApply").disabled = true;
+  if (!$("rpDevice").value) { $("rpErr").textContent = t("rec.replay.device.required"); return; }
+  try {
+    const r = await api("POST", "/api/scan/apply/replay", { ...replayBody(), dry_run: true });
+    $("rpPoints").textContent = t("rec.replay.points", { n: r.points.length, file: r.file, names: r.points.join(", ") });
+    $("rpRepHead").textContent = t(r.replaced.length ? "rec.replay.replaced" : "rec.replay.none_replaced");
+    $("rpReplaced").innerHTML = r.replaced.map((x) => `<li>${esc(x.point)}: ${esc(x.previous_behavior?.type ?? "?")}</li>`).join("");
+    $("rpApply").disabled = false;
+  } catch (e) { $("rpErr").textContent = e.message; }
+}
+
+function openReplay() {
+  const src = SJ.job?.plan?.source || {}, devs = (S.snap?.devices || []).map((d) => d.name);
+  const cur = src.device && devs.includes(src.device) ? src.device : "";
+  $("rpDevice").innerHTML = (cur ? "" : `<option value="">—</option>`)
+    + devs.map((n) => `<option ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("");
+  $("rpLoop").checked = true;
+  $("dlgReplay").showModal();
+  previewReplay();
+}
+
+async function applyReplay(ev) {
+  ev.preventDefault();
+  $("rpErr").textContent = "";
+  try {
+    const r = await api("POST", "/api/scan/apply/replay", replayBody());
+    $("dlgReplay").close(); $("dlgJob").close();
+    Shell.toast(t("rec.replay.ok", { file: r.file, n: r.points.length, device: r.device }), "ok");
+    await connectReload();
+    focusDevice(r.device);
+  } catch (e) { $("rpErr").textContent = e.message; }
+}
+
+$("jbReplay").onclick = openReplay;
+$("rpDevice").onchange = previewReplay;
+$("rpLoop").onchange = previewReplay;
+$("rpForm").onsubmit = applyReplay;
+$("rpCancel").onclick = () => $("dlgReplay").close();
 $("scForm").onsubmit = submitScan;
 $("scCancel").onclick = () => $("dlgScan").close();
 $("scRangeAdd").onclick = () => rangeRow();

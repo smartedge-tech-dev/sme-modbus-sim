@@ -321,11 +321,16 @@ def guess_float32(w0: List[int], w1: List[int]) -> Optional[Dict[str, Any]]:
     order, word_order, vals = cands[0]
     changing = len(set(vals)) > 1
     conf = 0.6 + (0.2 if changing else 0.0) + (0.1 if len(cands) == 1 else 0.0)
-    reason = (f"float32 {order}: plausible values {', '.join(f'{v:.6g}' for v in vals)}"
+    shown = ', '.join(f'{v:.6g}' for v in vals)
+    reason = (f"float32 {order}: plausible values {shown}"
               + (" (changing smoothly)" if changing else " (constant)")
               + ("" if len(cands) == 1 else f"; {cands[1][0]} also plausible"))
+    code = "float32_" + ("smooth" if changing else "constant") + ("" if len(cands) == 1 else "_ambiguous")
+    params = {"order": order, "values": shown}
+    if len(cands) > 1:
+        params["alt"] = cands[1][0]
     return {"datatype": "float32", "byte_order": "big", "word_order": word_order, "confidence": round(conf, 2),
-            "reason": reason, "count": 2}
+            "reason": reason, "reason_code": code, "reason_params": params, "count": 2}
 
 
 def guess_int32(w0: List[int], w1: List[int]) -> Optional[Dict[str, Any]]:
@@ -336,7 +341,8 @@ def guess_int32(w0: List[int], w1: List[int]) -> Optional[Dict[str, Any]]:
     dt = "int32" if signed else "uint32"
     conf = 0.7 if signed else 0.55
     return {"datatype": dt, "byte_order": "big", "word_order": "big", "confidence": conf, "count": 2,
-            "reason": f"{dt} ABCD: high word constant 0x{w0[0]:04X}-ish, low word changes"}
+            "reason": f"{dt} ABCD: high word constant 0x{w0[0]:04X}-ish, low word changes",
+            "reason_code": "int32_high_word_const", "reason_params": {"datatype": dt, "high": f"0x{w0[0]:04X}"}}
 
 
 def _printable(w: int) -> Tuple[bool, int]:
@@ -361,7 +367,8 @@ def guess_string(words: List[List[int]]) -> Optional[Dict[str, Any]]:
         return None
     text = b"".join(struct.pack(">H", s[0]) for s in words[:n]).rstrip(b"\x00").decode("ascii")
     return {"datatype": "string", "byte_order": "big", "word_order": "big", "count": n,
-            "confidence": round(min(0.9, 0.5 + 0.05 * chars), 2), "reason": f"printable ASCII {text!r}"}
+            "confidence": round(min(0.9, 0.5 + 0.05 * chars), 2), "reason": f"printable ASCII {text!r}",
+            "reason_code": "ascii_run", "reason_params": {"text": text}}
 
 
 def guess_int16(samples: List[int]) -> Optional[Dict[str, Any]]:
@@ -369,19 +376,28 @@ def guess_int16(samples: List[int]) -> Optional[Dict[str, Any]]:
     if samples and all(s >= 0xF000 for s in samples):
         vals = [s - 0x10000 for s in samples]
         return {"datatype": "int16", "byte_order": "big", "word_order": "big", "count": 1, "confidence": 0.6,
-                "reason": f"values near 0xFFFF read as int16 {vals}"}
+                "reason": f"values near 0xFFFF read as int16 {vals}",
+                "reason_code": "int16_negative", "reason_params": {"values": ", ".join(map(str, vals))}}
     return None
 
 
 def guess_bool(samples: List[int]) -> Dict[str, Any]:
     changing = len(set(samples)) > 1
     return {"datatype": "bool", "byte_order": "big", "word_order": "big", "count": 1,
-            "confidence": 0.8 if changing else 0.9, "reason": "single bit" + (" (changing)" if changing else "")}
+            "confidence": 0.8 if changing else 0.9, "reason": "single bit" + (" (changing)" if changing else ""),
+            "reason_code": "bool_bits_changing" if changing else "bool_bits", "reason_params": {}}
+
+
+# Every ``reason_code`` the heuristics can emit (the web UI localises ``scan.reason.<code>`` with
+# ``reason_params``; ``reason`` stays the English text for the CLI YAML comments and API clients).
+REASON_CODES = ("float32_smooth", "float32_constant", "float32_smooth_ambiguous", "float32_constant_ambiguous",
+                "int32_high_word_const", "ascii_run", "int16_negative", "bool_bits", "bool_bits_changing",
+                "default")
 
 
 def suggest(table: str, samples: Dict[int, List[int]]) -> List[Dict[str, Any]]:
     """Datatype suggestions for one table: ``{address, table, datatype, byte_order, word_order, count, name,
-    confidence, reason, value}`` (``value`` decoded from the last sample). Addresses consumed by a multi-register
+    confidence, reason, reason_code, reason_params, value}`` (``value`` decoded from the last sample). Addresses consumed by a multi-register
     guess are not suggested again."""
     out: List[Dict[str, Any]] = []
     addrs = sorted(samples)
@@ -404,7 +420,8 @@ def suggest(table: str, samples: Dict[int, List[int]]) -> List[Dict[str, Any]]:
                  or (guess_int32(run[0], run[1]) if pair else None)
                  or guess_int16(s)
                  or {"datatype": "uint16", "byte_order": "big", "word_order": "big", "count": 1,
-                     "confidence": 0.5, "reason": "default (no stronger pattern)"})
+                     "confidence": 0.5, "reason": "default (no stronger pattern)", "reason_code": "default",
+                     "reason_params": {}})
         n = g["count"]
         used.update(range(a, a + n))
         words = [samples[a + i][-1] for i in range(n)]
@@ -678,7 +695,8 @@ async def record(client: ModbusClient, unit: int, points: List[PointConfig], per
         warnings.append(f"first row has empty cells for {missing_first}: replay rejects a column whose first "
                         "value is empty - fill those cells or delete the row before using the CSV for replay")
     return {"path": str(out_csv), "rows": rows, "cycles": cycles, "columns": [p.name for p in points],
-            "failed_reads": failed, "requests": client.requests, "cancelled": cancelled, "warnings": warnings}
+            "failed_reads": failed, "requests": client.requests, "cancelled": cancelled, "warnings": warnings,
+            "missing_first": missing_first}
 
 
 # ---------------------------------------------------------------- background jobs (web)

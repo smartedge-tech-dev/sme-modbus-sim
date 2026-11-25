@@ -18,6 +18,7 @@ First release (0.1.0): a Modbus device simulator with a live web UI.
 
 **Scan and record**
 - Read-only `scan` / `record` of a real device (Modbus TCP, RTU over TCP, serial RTU; only FC 01/02/03/04 and 2B/0E are ever sent, rate-limited, per-request timeout): `scan` finds readable addresses in the given ranges, samples them and suggests datatypes (float32 ABCD / CDAB, int32, int16, string, bool) with a confidence and reason, then saves a user template or adds a device; `record` polls points into a replay CSV. CLI subcommands with a confirmation prompt (`-y` to skip), and `/api/scan/*` / `/api/record/*` background jobs (one at a time, cancellable, progress as WebSocket event `scan`).
+- After a recording, "Attach replay to points" (`POST /api/scan/apply/replay`, `{device?, loop?, dry_run?}`) gives each recorded column's point a `replay` behavior on the CSV, listing the behaviors it replaces; a CSV with empty first-row cells is refused. Guess reasons carry a `reason_code` / `reason_params` so the web UI shows them in English, Japanese and Chinese (`reason` stays English for the CLI and API).
 
 **Simulation**
 - Behaviors `sine`, `random`, `random_walk`, `expr`, `follow`, `ramp`, `counter`, `pulse`, `replay` (CSV); min / max clamping, integer counter wrap-around, read-only point protection; cross-device coupling (the demo site couples PCS, BMS and meter; `configs/demo-coupled-site.yaml` adds a PV / load / battery / grid-meter site whose meter balances load − PV − battery).

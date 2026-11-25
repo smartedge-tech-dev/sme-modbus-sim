@@ -18,6 +18,7 @@ import yaml
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
+from sme_sim_common.behaviors import ReplayTable
 from sme_sim_common.templates import NAME_RE
 from sme_sim_common.web import bad, make_base_app
 
@@ -223,6 +224,8 @@ def _record_request(engine: Engine, body: Dict[str, Any]):
         raise bad(400, "file: a plain file name ending in .csv (saved next to the config file)")
     path = Path(engine.base_dir or Path.cwd()) / name
     plan["file"] = str(path)
+    src = sources[0]
+    plan["source"] = {src: body[src] if src != "points" else len(body["points"])}
     return client, unit, points, (dev.byte_order, dev.word_order), period, duration, path, plan
 
 
@@ -351,6 +354,72 @@ def add_scan_routes(r: APIRouter, engine: Engine) -> None:
             raise bad(400, e) from None
         engine.log_event("config", f"device {name} added from scan of {result.get('target')}")
         return {"ok": True, "name": name, "device": dev}
+
+    @r.post("/api/scan/apply/replay")
+    async def apply_replay(request: Request):
+        """Give every recorded column's point a ``replay`` behavior on the recorded CSV (design §6). Body
+        ``{device?, loop? = true, dry_run? = false}``; ``device`` defaults to the recorded device and is required
+        when the recording came from a template or a point list. Same path as device edits: in-memory config +
+        reload (the config file is written only by File > Save)."""
+        body = await body_of(request)
+        job = jobs.job
+        if not job or job["kind"] != "record" or job["state"] == "running" or not job.get("result"):
+            raise bad(409, "no finished record job to apply")
+        res, src = job["result"], job["plan"].get("source") or {}
+        name = body.get("device") or src.get("device")
+        if not name:
+            what = f"template {src['template']!r}" if src.get("template") else "a point list"
+            raise bad(400, f"device: required (the recording was made from {what}, not from a configured device)")
+        loop = body.get("loop", True)
+        if not isinstance(loop, bool):
+            raise bad(400, "loop: true or false")
+        idx = next((i for i, d in enumerate(engine.config.devices) if d.name == name), None)
+        if idx is None:
+            raise bad(400, f"device {name!r} not found")
+        cols = list(res.get("columns") or [])
+        if res.get("missing_first"):
+            raise bad(400, f"the first row of {Path(res['path']).name} has empty cells for {res['missing_first']}: "
+                           "replay cannot start a column without a value (and rejects the whole file), so no "
+                           "replay was attached - fill those cells or delete that row first")
+        path = Path(res["path"])
+        try:
+            ReplayTable(path)
+        except ValueError as e:
+            raise bad(400, f"the recorded CSV cannot be replayed: {e}") from None
+        expanded = {p.name: p for p in tpl.expand_device(engine.config.devices[idx])}
+        missing = [c for c in cols if c not in expanded]
+        if missing:
+            raise bad(400, f"device {name!r} has no points {missing} (recorded columns)")
+        base = Path(engine.base_dir or Path.cwd())
+        try:
+            file = path.resolve().relative_to(base.resolve()).as_posix()
+        except ValueError:
+            file = str(path)
+        data = engine.config.model_dump(mode="json", exclude_unset=True, exclude_none=True)
+        own = data["devices"][idx].setdefault("points", [])
+        replaced = []
+        for c in cols:
+            spec = {"type": "replay", "file": file, "column": c, "loop": loop}
+            if expanded[c].behavior:
+                replaced.append({"point": c, "previous_behavior": expanded[c].behavior})
+            pt = next((p for p in own if p.get("name") == c), None)
+            if pt is None:
+                own.append({"name": c, "behavior": spec})  # override of a template point
+            else:
+                pt["behavior"] = spec
+        out = {"ok": True, "device": name, "file": file, "loop": loop, "points": cols, "replaced": replaced}
+        if body.get("dry_run"):
+            return {**out, "dry_run": True}
+        try:
+            cfg = SimConfig.model_validate(data)
+        except (TypeError, ValueError) as e:
+            raise bad(400, e) from None
+        try:
+            await engine.reload(cfg, engine.dump_config(cfg))
+        except Exception as e:  # noqa: BLE001 - the old config keeps running
+            raise bad(400, e) from None
+        engine.log_event("config", f"device {name}: replay of {file} attached to {len(cols)} points")
+        return out
 
 
 def create_app(engine: Engine, config_path: Optional[str | Path] = None) -> FastAPI:

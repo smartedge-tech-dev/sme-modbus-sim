@@ -216,6 +216,23 @@
   </form>
 </dialog>
 
+<dialog id="dlgReplay" class="dialog sh-dialog">
+  <form class="dlgform" id="rpForm">
+    <h3 data-i18n="rec.replay.title">Attach replay to points</h3>
+    <p class="hint" data-i18n="rec.replay.hint">Every recorded column becomes the replay behavior of the point with the same name.</p>
+    <label class="ddf"><span data-i18n="rec.replay.device">Target device</span><select id="rpDevice"></select></label>
+    <label class="chk"><input id="rpLoop" type="checkbox" checked> <span data-i18n="rec.replay.loop">Loop back to the start at the end of the CSV</span></label>
+    <p class="hint" id="rpPoints"></p>
+    <p class="hint" id="rpRepHead"></p>
+    <ul class="errlist" id="rpReplaced"></ul>
+    <div class="err" id="rpErr"></div>
+    <div class="dlgbtns">
+      <button class="btn" type="button" id="rpCancel" data-i18n="scan.back">Back</button>
+      <button class="btn primary" type="submit" id="rpApply" data-i18n="rec.replay.apply">Attach replay</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="dlgConfirm" class="dialog sh-dialog">
   <form class="dlgform" id="cfForm">
     <h3 id="cfTitle"></h3>
@@ -271,6 +288,7 @@
     <div id="jbRec" hidden>
       <p><a id="jbCsv" href="/api/scan/job/csv" download data-i18n="rec.download">Download CSV</a> <span class="hint" id="jbPath"></span></p>
       <ul class="errlist" id="jbWarn"></ul>
+      <p><button type="button" class="btn small" id="jbReplay" data-i18n="rec.replay">Attach replay to points…</button></p>
     </div>
     <div class="dlgbtns">
       <button class="btn danger" type="button" id="jbCancel" data-i18n="job.cancel">Cancel job</button>

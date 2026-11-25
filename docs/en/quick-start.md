@@ -96,3 +96,9 @@ Datatypes are guesses: check them before use (copy the template into the user te
 Failed reads leave an empty cell; replay holds the previous value for empty cells, but an empty cell in the
 first data row is rejected, so fill it in before using the CSV. The web UI offers the same through
 `/api/scan/*` and `/api/record/*` (one job at a time).
+
+After a recording finishes, **Attach replay to points…** in the job dialog gives every recorded column's point a
+`replay` behavior on the CSV (`{type: replay, file: <csv>, column: <point>, loop: true}`; loop is optional). It
+targets the recorded device, or a device you pick when you recorded from a template; the dialog lists the
+behaviors it replaces. A CSV whose first row has empty cells is refused. Like other device edits this changes the
+running configuration; use Save to write it to the file (`POST /api/scan/apply/replay`).

@@ -93,3 +93,8 @@ sme-modbus-sim record --host 192.168.1.50 --unit 1 --template meter1.yaml --peri
 数据类型只是推测，使用前请核对（把模板复制到用户模板目录即可使用）。读取失败的单元格留空；replay 对空单元格
 沿用上一个值，但第一行数据中的空单元格会报错，使用 CSV 前请补上。Web UI 通过 `/api/scan/*` 与
 `/api/record/*` 提供同样的功能（同一时间只允许一个作业）。
+
+录制完成后，作业对话框里的 **给点挂上 replay…** 会给每个录制列的同名点挂上该 CSV 的 `replay` 行为
+（`{type: replay, file: <csv>, column: <点名>, loop: true}`，loop 可选）。目标是录制所用的设备；若是从模板录制，
+则需选择一个设备；对话框会列出将被替换的行为。第一行有空单元格的 CSV 会被拒绝。与其它设备编辑一样只改动运行中的
+配置，要写入文件请用「保存」（`POST /api/scan/apply/replay`）。
