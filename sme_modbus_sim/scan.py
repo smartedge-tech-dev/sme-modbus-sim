@@ -367,6 +367,10 @@ def guess_string(words: List[List[int]]) -> Optional[Dict[str, Any]]:
             break
     if n < 2 or chars < 4:
         return None
+    vals = [s[0] for s in words[:n]]
+    if all(b - a == 1 for a, b in zip(vals, vals[1:])):
+        # Consecutive integers (e.g. 30502, 30503, ... - a test pattern or a counter table) only look like text.
+        return None
     text = b"".join(struct.pack(">H", s[0]) for s in words[:n]).rstrip(b"\x00").decode("ascii")
     return {"datatype": "string", "byte_order": "big", "word_order": "big", "count": n,
             "confidence": round(min(0.9, 0.5 + 0.05 * chars), 2), "reason": f"printable ASCII {text!r}",

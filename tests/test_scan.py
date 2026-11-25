@@ -490,3 +490,10 @@ def test_parse_range_accepts_plural_table_names():
     from sme_modbus_sim.scan import parse_range
     assert parse_range("coils:0-15") == parse_range("coil:0-15")
     assert parse_range("holdings:3").table == "holding"
+
+
+def test_consecutive_integers_are_not_guessed_as_string():
+    from sme_modbus_sim.scan import guess_string
+    # 30502..30505 = "w&w'w(w)" in ASCII: seen on a real device that holds each register's own address.
+    assert guess_string([[30502] * 3, [30503] * 3, [30504] * 3, [30505] * 3]) is None
+    assert guess_string([[0x534D] * 2, [0x4152] * 2, [0x5400] * 2])["datatype"] == "string"  # "SMART"
