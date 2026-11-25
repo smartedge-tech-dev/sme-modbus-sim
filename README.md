@@ -114,7 +114,7 @@ Possible future work: Modbus ASCII, UDP, the serial diagnostic function codes (0
 Modbus/TCP Security (TLS), SunSpec DER and battery models, and scanning / recording real devices to build a
 point list.
 
-> Not affiliated with, endorsed by, or certified by SunSpec Alliance. The `sunspec_pv_inverter` (models 1, 103, 120-123, 160) and `sunspec_meter` (models 1, 203) templates are generated from the public SunSpec model definitions (Apache-2.0) and implement SunSpec Modbus models. No vendor register maps are built in; import your own privately via Excel or user-local templates.
+> Not affiliated with, endorsed by, or certified by SunSpec Alliance. The `sunspec_pv_inverter` (models 1, 103, 120-123, 160) and `sunspec_meter` (models 1, 203), `sunspec_der` (models 1, 701-705) and `sunspec_battery` (models 1, 802, 803) templates are generated from the public SunSpec model definitions (Apache-2.0) and implement SunSpec Modbus models. No vendor register maps are built in; import your own privately via Excel or user-local templates.
 
 ## Commercial support & custom development
 

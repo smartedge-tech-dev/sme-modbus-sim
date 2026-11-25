@@ -100,3 +100,20 @@ float32 の 1.0（0x3F800000）は次のように送られます。
 | big / little | `0000 3F80` | CDAB（電力量計で一般的） |
 | little / big | `803F 0000` | BADC |
 | little / little | `0000 803F` | DCBA |
+
+## 連成サイトの例
+
+`configs/demo-coupled-site.yaml` は、汎用テンプレートと式だけで 5 台の機器を 1 つの TCP リスナー（ポート 5020）上で連成させ、
+EMS から閉ループで試験できるようにした設定です。
+
+| 機器（unit） | ポイント | 振る舞い |
+|---|---|---|
+| PV-1（1、`custom`） | `p_ac` | `40 * max(0, sin(pi * (hour - 6) / 12)) * cloud_factor`（06:00〜18:00 に発電。`cloud_factor` は 0.7〜1.0 のランダムウォーク） |
+| Load-1（2、`custom`） | `active_power` | `20 + 15 * exp(-((hour - 8) ** 2) / 4) + 25 * exp(-((hour - 19) ** 2) / 6) + noise(0.5)` |
+| PCS-1（3、`battery_pcs`） | `p_actual` | `run_command` がオンの間、`p_setpoint` へ 10 kW/s でランプ（BMS の SOC 制限で阻止） |
+| BMS-1（4、`bms`） | `soc` | レート `-p_actual / capacity_kwh * 100 / 3600`（%/秒）の counter、0〜100 にクランプ |
+| Meter-1（5、`power_meter`） | `active_power` | `pv('Load-1', 'active_power') - pv('PV-1', 'p_ac') - pv('PCS-1', 'p_actual')` |
+
+符号：PCS 電力は + 放電 / - 充電、メーター電力は + 受電 / - 逆潮流で、受電・逆潮流の電力量カウンターはこれを積算します。
+振る舞いはファイル順に機器ごとに実行されるため、最後に置いたメーターは同じティックの値を使います。
+試し方：unit 3 の holding 0 = 200（20.0 kW）と coil 0 = 1 を書き込むと、メーターの受電が 20 kW 下がり、BMS-1 の `soc` が減っていきます。

@@ -31,7 +31,7 @@
 | `env_sensor` | 温度与湿度 |
 | `custom` | 空设备，所有点自行定义 |
 
-参数可用 `sme-modbus-sim templates` 查看。模板为通用的原创定义，不内置任何厂商的寄存器表。`sunspec_pv_inverter` 与 `sunspec_meter`
+参数可用 `sme-modbus-sim templates` 查看。模板为通用的原创定义，不内置任何厂商的寄存器表。`sunspec_pv_inverter`、`sunspec_meter`、`sunspec_der` 与 `sunspec_battery`
 由公开的 SunSpec 模型定义（Apache-2.0）生成，实现 SunSpec Modbus 模型（与 SunSpec Alliance 无任何关联，未获其认可或认证）。
 自有厂商表可通过 [Excel](excel.md) 或用户本地模板私下导入。
 
@@ -63,7 +63,7 @@ points:                    # 与设备的 points: 相同的 schema
 
 ## SunSpec 模板
 
-`sunspec_pv_inverter` 与 `sunspec_meter` 是由公开的 SunSpec 模型定义（Apache-2.0，从
+`sunspec_pv_inverter`、`sunspec_meter`、`sunspec_der` 与 `sunspec_battery` 是由公开的 SunSpec 模型定义（Apache-2.0，从
 [sunspec/models](https://github.com/sunspec/models) 提交 `90b4a331dcca1d6eac69c1bead952fddcc5852e0`
 原样收录）生成的模板，实现了 SunSpec Modbus 模型。与 SunSpec Alliance 无任何关联，未获其认可或认证。
 
@@ -71,6 +71,8 @@ points:                    # 与设备的 points: 相同的 schema
 |---|---|---|
 | `sunspec_pv_inverter` | 1, 103, 120, 121, 122, 123, 160 | `rated_w`, `mppt_count`, `ac_voltage_v`, `frequency_hz`, `dc_voltage_v`, `serial_number`, `base_address` |
 | `sunspec_meter` | 1, 203 | `base_load_w`, `voltage_v`, `frequency_hz`, `pv_device`, `serial_number`, `base_address` |
+| `sunspec_der` | 1, 701, 702, 703, 704, 705 | `rated_w`, `ac_voltage_v`, `frequency_hz`, `vv_curves`, `vv_points`, `serial_number`, `base_address` |
+| `sunspec_battery` | 1, 802, 803 | `capacity_wh`, `max_w`, `dc_voltage_v`, `initial_soc`, `string_count`, `der_device`, `serial_number`, `base_address` |
 
 - 从 `base_address`（40000 / 0 / 50000）起在保持寄存器中依次放置 `SunS` 标识、各模型（`ID`、`L`、点）、
   结束模型（`0xFFFF`、`L = 0`）。点名为 `m<id>_<Name>`（如 `m103_W`），重复组为 `m160_module1_DCW` 等。
@@ -80,3 +82,15 @@ points:                    # 与设备的 points: 相同的 schema
   在 UI 与 API 中显示为 `null`（点字段 `nullable: true`）。无值的可选点视为未实现；累计量不会为 null。
 - 逆变器：`m103_W` 随日照曲线变化，`m123_WMaxLim_Ena = 1` 时受 `m123_WMaxLimPct` 限制，`m123_Conn = 0` 时为 0；
   `m103_WH` 累计。电表：`m203_W` = 负荷曲线 − `pv_device` 的 `m103_W`（> 0 买电），`m203_TotWhImp` / `m203_TotWhExp` 累计。
+- DER（`sunspec_der`）：`m701_W` 按日照曲线，或在 `m704_WSetEna = 1` 时按 `m704_WSet`（W）/ `m704_WSetPct`
+  （`m702_WMax` 的 %）斜坡跟随（负值 = 吸收，下限 `-m702_WChaRteMax`）；`m704_WMaxLimPctEna = 1` 时受
+  `m704_WMaxLimPct` 限制；上升速率受 `m704_WRmp`（每秒 `m702_WMax` 的 %）限制；`m703_ES = 0` 时为 0。
+  `m704_VarSetEna = 1` 时 `m701_Var` 按 `m704_VarSetMod` 跟随 `m704_VarSet` / `m704_VarSetPct`。
+  `m701_TotWhInj` / `m701_TotWhAbs` 累计。模型 705 含 `vv_curves` 条 × `vv_points` 点的曲线（嵌套重复组，
+  `NCrv` / `NPt` 同步设置），并给出示例默认曲线。
+- 电池（`sunspec_battery`）：`m802_W`（模拟器约定：> 0 放电、< 0 充电，与模型 701 `W` 同号）跟随演示用日曲线或
+  `der_device` 的 `m701_W`，到达 `m802_SoCMin` / `m802_SoCMax` 或 `m802_SetOp = 2`（DISCONNECT）时停止；
+  `m802_SoC` 按 `m802_WHRtg` 对 `m802_W` 积分；`m802_ChaSt`、`m802_V`、`m802_A`、电芯电压及模型 803 各串的点由此导出。
+- 不支持（寄存器可读写但不影响行为）：恢复定时器（`*Rvrt*`）、功率因数设定（`m704_PFW*`）、无功优先级、
+  volt-var 曲线执行（`m705_Ena`、`AdptCrvReq`）、并网（enter service）阈值 / 延时、防孤岛、`m802_SetInvState`、
+  心跳监视（`m802_CtrlHb`）、告警复位。其详细语义不在模型定义中。

@@ -101,7 +101,7 @@ Windows exe、多架构 Docker、离线包。
 后续候选：Modbus ASCII、UDP、串口诊断功能码（07 / 08 / 0B / 0C / 11）、Modbus/TCP Security（TLS）、
 SunSpec DER 与电池模型、扫描 / 录制真实设备以生成点表。
 
-> 与 SunSpec Alliance 无任何关联，未获其认可或认证。`sunspec_pv_inverter`（模型 1、103、120-123、160）与 `sunspec_meter`（模型 1、203）模板由公开的 SunSpec 模型定义（Apache-2.0）生成，实现 SunSpec Modbus 模型。不内置任何厂商的寄存器表；自有厂商表可通过 Excel 或用户本地模板私下导入。
+> 与 SunSpec Alliance 无任何关联，未获其认可或认证。`sunspec_pv_inverter`（模型 1、103、120-123、160）、`sunspec_meter`（模型 1、203）、`sunspec_der`（模型 1、701-705）与 `sunspec_battery`（模型 1、802、803）模板由公开的 SunSpec 模型定义（Apache-2.0）生成，实现 SunSpec Modbus 模型。不内置任何厂商的寄存器表；自有厂商表可通过 Excel 或用户本地模板私下导入。
 
 ## 商务支持与定制开发
 

@@ -33,7 +33,7 @@ Modbus マスターや UI から書き込まれた値は、データ型、`min` 
 | `custom` | 空のデバイス。ポイントはすべて自分で定義します |
 
 パラメーターは `sme-modbus-sim templates` で確認できます。テンプレートは汎用の独自定義で、特定メーカーのレジスタマップは
-内蔵していません。`sunspec_pv_inverter` と `sunspec_meter` は公開されている SunSpec モデル定義（Apache-2.0）から生成した、
+内蔵していません。`sunspec_pv_inverter`、`sunspec_meter`、`sunspec_der`、`sunspec_battery` は公開されている SunSpec モデル定義（Apache-2.0）から生成した、
 SunSpec Modbus モデルを実装するテンプレートです（SunSpec Alliance とは提携・推奨・認証の関係にありません）。
 お手元のメーカーマップは [Excel](excel.md) またはユーザーローカルテンプレートで非公開のまま取り込めます。
 
@@ -69,7 +69,7 @@ points:                    # デバイスの points: と同じスキーマ
 
 ## SunSpec テンプレート
 
-`sunspec_pv_inverter` と `sunspec_meter` は、公開されている SunSpec モデル定義（Apache-2.0、
+`sunspec_pv_inverter`、`sunspec_meter`、`sunspec_der`、`sunspec_battery` は、公開されている SunSpec モデル定義（Apache-2.0、
 [sunspec/models](https://github.com/sunspec/models) のコミット `90b4a331dcca1d6eac69c1bead952fddcc5852e0`
 を無改変で同梱）から生成したテンプレートで、SunSpec Modbus モデルを実装しています。
 SunSpec Alliance とは提携・推奨・認証の関係にありません。
@@ -78,6 +78,8 @@ SunSpec Alliance とは提携・推奨・認証の関係にありません。
 |---|---|---|
 | `sunspec_pv_inverter` | 1, 103, 120, 121, 122, 123, 160 | `rated_w`, `mppt_count`, `ac_voltage_v`, `frequency_hz`, `dc_voltage_v`, `serial_number`, `base_address` |
 | `sunspec_meter` | 1, 203 | `base_load_w`, `voltage_v`, `frequency_hz`, `pv_device`, `serial_number`, `base_address` |
+| `sunspec_der` | 1, 701, 702, 703, 704, 705 | `rated_w`, `ac_voltage_v`, `frequency_hz`, `vv_curves`, `vv_points`, `serial_number`, `base_address` |
+| `sunspec_battery` | 1, 802, 803 | `capacity_wh`, `max_w`, `dc_voltage_v`, `initial_soc`, `string_count`, `der_device`, `serial_number`, `base_address` |
 
 - `base_address`（40000 / 0 / 50000）から保持レジスタに `SunS` マーカ、各モデル（`ID`, `L`, ポイント）、
   終端モデル（`0xFFFF`, `L = 0`）を配置。ポイント名は `m<id>_<Name>`（例 `m103_W`）、繰り返しグループは
@@ -89,3 +91,16 @@ SunSpec Alliance とは提携・推奨・認証の関係にありません。
 - インバータ：`m103_W` は日射カーブに追従し、`m123_WMaxLim_Ena = 1` のとき `m123_WMaxLimPct` で制限、
   `m123_Conn = 0` で 0。`m103_WH` は積算。メータ：`m203_W` = 負荷プロファイル − `pv_device` の `m103_W`
   （正 = 買電）、`m203_TotWhImp` / `m203_TotWhExp` は積算。
+- DER（`sunspec_der`）：`m701_W` は日射カーブ、または `m704_WSetEna = 1` のとき `m704_WSet`（W）／
+  `m704_WSetPct`（`m702_WMax` の %）へランプ追従（負 = 吸収、下限 `-m702_WChaRteMax`）。`m704_WMaxLimPctEna = 1`
+  で `m704_WMaxLimPct` により制限、増加は `m704_WRmp`（毎秒 `m702_WMax` の %）で制限、`m703_ES = 0` で 0。
+  `m704_VarSetEna = 1` のとき `m701_Var` は `m704_VarSetMod` に応じて `m704_VarSet` / `m704_VarSetPct` に追従。
+  `m701_TotWhInj` / `m701_TotWhAbs` は積算。モデル 705 は `vv_curves` 本 × `vv_points` 点のカーブ（入れ子の繰り返し
+  グループ、`NCrv` / `NPt` も連動）を持ち、例示用の既定カーブを設定。
+- バッテリー（`sunspec_battery`）：`m802_W`（シミュレータの規約：正 = 放電、負 = 充電、モデル 701 `W` と同符号）は
+  デモ用の日プロファイルまたは `der_device` の `m701_W` に追従し、`m802_SoCMin` / `m802_SoCMax` 到達時と
+  `m802_SetOp = 2`（DISCONNECT）で停止。`m802_SoC` は `m802_W` を `m802_WHRtg` で積分。`m802_ChaSt`、`m802_V`、
+  `m802_A`、セル電圧、モデル 803 のストリングポイントはそこから導出。
+- 非対応（レジスタの読み書きは可能だが動作に影響しない）：復帰タイマ（`*Rvrt*`）、力率設定（`m704_PFW*`）、
+  無効電力優先度、volt-var カーブの実行（`m705_Ena`、`AdptCrvReq`）、系統連系開始の閾値・遅延、単独運転防止、
+  `m802_SetInvState`、ハートビート監視（`m802_CtrlHb`）、アラームリセット。詳細な意味はモデル定義に含まれないため。

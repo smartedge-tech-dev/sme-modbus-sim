@@ -1,0 +1,107 @@
+# SME ModbusSim coupled site demo: PV + site load + battery (PCS / BMS) + grid meter.
+#
+# Every device is a generic template; the coupling is done with expr / ramp / counter behaviors only.
+#
+#   PV-1     p_ac          = rated * max(0, sin(pi * (hour - 6) / 12)) * cloud_factor   (daylight 06:00-18:00)
+#   Load-1   active_power  = base + morning peak (08:00) + evening peak (19:00) + noise
+#   PCS-1    p_actual      ramps to p_setpoint while run_command is on (SOC limits from BMS-1)
+#   BMS-1    soc           integrates -PCS-1 p_actual / capacity_kwh over time (clamped 0..100 %)
+#   Meter-1  active_power  = Load-1 - PV-1 - PCS-1      (grid point, + import / - export)
+#
+# Sign convention: PCS p_setpoint / p_actual + = discharge (battery -> site), - = charge.
+# Device order matters: behaviors run device by device in file order, so Meter-1 (last) sees the
+# values of the same tick from PV-1, Load-1 and PCS-1.
+#
+# Addresses are 0-based protocol addresses. Try:
+#   write holding 0 on unit 3 (PCS-1 p_setpoint, int16 x0.1 kW) = 200  -> 20.0 kW discharge
+#   write coil 0 on unit 3 (PCS-1 run_command) = 1
+#   read input 12-13 on unit 5 (Meter-1 active_power, float32 CDAB) -> import drops by 20 kW
+
+simulation: {tick_seconds: 1, time_scale: 1, history_size: 600, running: true}
+
+listeners:
+  - {id: tcp1, type: tcp, host: 0.0.0.0, port: 5020, unit_id_mode: strict, unknown_unit: ignore}
+
+devices:
+  - name: PV-1
+    description: PV inverter (generic, daytime generation curve)
+    unit_id: 1
+    template: custom
+    identification: {vendor_name: SmartEdge, product_code: SIM-PV, revision: "0.1"}
+    points:
+      - name: cloud_factor
+        table: input
+        address: 0
+        datatype: uint16
+        scale: 0.001
+        value: 1
+        description: Irradiance factor (1 = clear sky)
+        behavior: {type: random_walk, min: 0.7, max: 1.0, step: 0.01}
+      - name: p_ac
+        table: input
+        address: 1
+        datatype: int16
+        scale: 0.1
+        units: kW
+        value: 0
+        description: AC output power (rated 40 kW)
+        behavior: {type: expr, expr: "40 * max(0, sin(pi * (hour - 6) / 12)) * cloud_factor"}
+      - name: energy_total
+        table: input
+        address: 2
+        datatype: uint32
+        scale: 0.1
+        units: kWh
+        value: 0
+        behavior: {type: counter, rate: "p_ac / 3600"}
+
+  - name: Load-1
+    description: Site load sub-meter (daily profile with morning / evening peaks)
+    unit_id: 2
+    template: custom
+    identification: {vendor_name: SmartEdge, product_code: SIM-LOAD, revision: "0.1"}
+    points:
+      - name: active_power
+        table: input
+        address: 0
+        datatype: float32
+        units: kW
+        value: 20
+        behavior:
+          type: expr
+          expr: "max(0, 20 + 15 * exp(-((hour - 8) ** 2) / 4) + 25 * exp(-((hour - 19) ** 2) / 6) + noise(0.5))"
+      - name: energy_total
+        table: input
+        address: 2
+        datatype: float64
+        units: kWh
+        value: 0
+        behavior: {type: counter, rate: "active_power / 3600"}
+
+  - name: PCS-1
+    description: Battery power conversion system
+    unit_id: 3
+    template: battery_pcs
+    params: {rated_kw: 50, rated_kvar: 50, bms_device: BMS-1, ramp_kw_per_s: 10}
+    identification: {vendor_name: SmartEdge, product_code: SIM-PCS, revision: "0.1"}
+
+  - name: BMS-1
+    description: Battery management system (100 kWh)
+    unit_id: 4
+    template: bms
+    params: {capacity_kwh: 100, max_power_kw: 50, initial_soc: 60, pcs_device: PCS-1}
+    identification: {vendor_name: SmartEdge, product_code: SIM-BMS, revision: "0.1"}
+
+  - name: Meter-1
+    description: Grid connection point meter (+ import / - export)
+    unit_id: 5
+    template: power_meter
+    params: {voltage_v: 230}
+    word_order: little   # CDAB float32 / uint32, a common meter layout
+    identification: {vendor_name: SmartEdge, product_code: SIM-MTR, revision: "0.1"}
+    points:
+      - name: active_power
+        behavior:
+          type: expr
+          expr: "pv('Load-1', 'active_power') - pv('PV-1', 'p_ac') - pv('PCS-1', 'p_actual')"
+      - {name: serial_number, value: "MTR00001"}

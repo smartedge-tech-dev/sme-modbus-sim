@@ -100,3 +100,20 @@ float32 的 1.0（0x3F800000）发送如下：
 | big / little | `0000 3F80` | CDAB（电能表常见） |
 | little / big | `803F 0000` | BADC |
 | little / little | `0000 803F` | DCBA |
+
+## 耦合站点示例
+
+`configs/demo-coupled-site.yaml` 只用通用模板和表达式，把 5 台设备耦合在同一个 TCP 监听器（端口 5020）上，
+方便 EMS 对其做闭环测试：
+
+| 设备（unit） | 点位 | 行为 |
+|---|---|---|
+| PV-1（1，`custom`） | `p_ac` | `40 * max(0, sin(pi * (hour - 6) / 12)) * cloud_factor`（06:00–18:00 发电；`cloud_factor` 为 0.7–1.0 的随机游走） |
+| Load-1（2，`custom`） | `active_power` | `20 + 15 * exp(-((hour - 8) ** 2) / 4) + 25 * exp(-((hour - 19) ** 2) / 6) + noise(0.5)` |
+| PCS-1（3，`battery_pcs`） | `p_actual` | `run_command` 为开时以 10 kW/s 斜坡逼近 `p_setpoint`（受 BMS SOC 限制） |
+| BMS-1（4，`bms`） | `soc` | 速率为 `-p_actual / capacity_kwh * 100 / 3600`（%/秒）的 counter，钳位在 0–100 |
+| Meter-1（5，`power_meter`） | `active_power` | `pv('Load-1', 'active_power') - pv('PV-1', 'p_ac') - pv('PCS-1', 'p_actual')` |
+
+符号：PCS 功率 + 放电 / - 充电；电表功率 + 购电 / - 上网，购电 / 上网电能计数器对其积分。
+行为按文件顺序逐台设备执行，因此放在最后的电表使用的是同一 tick 的值。
+试一试：向 unit 3 写 holding 0 = 200（20.0 kW）和 coil 0 = 1，电表购电功率会下降 20 kW，BMS-1 的 `soc` 随之下降。

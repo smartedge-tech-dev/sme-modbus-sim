@@ -100,3 +100,21 @@ a register. A float32 of 1.0 (0x3F800000) is sent as:
 | big / little | `0000 3F80` | CDAB (common for meters) |
 | little / big | `803F 0000` | BADC |
 | little / little | `0000 803F` | DCBA |
+
+## Coupled site example
+
+`configs/demo-coupled-site.yaml` couples five devices on one TCP listener (port 5020) with generic templates and
+expressions only, so an EMS can close the loop against it:
+
+| Device (unit) | Point | Behavior |
+|---|---|---|
+| PV-1 (1, `custom`) | `p_ac` | `40 * max(0, sin(pi * (hour - 6) / 12)) * cloud_factor` (daylight 06:00-18:00; `cloud_factor` is a random walk 0.7-1.0) |
+| Load-1 (2, `custom`) | `active_power` | `20 + 15 * exp(-((hour - 8) ** 2) / 4) + 25 * exp(-((hour - 19) ** 2) / 6) + noise(0.5)` |
+| PCS-1 (3, `battery_pcs`) | `p_actual` | Ramps to `p_setpoint` at 10 kW/s while `run_command` is on (blocked at the BMS SOC limits) |
+| BMS-1 (4, `bms`) | `soc` | Counter with rate `-p_actual / capacity_kwh * 100 / 3600` (% per second), clamped 0-100 |
+| Meter-1 (5, `power_meter`) | `active_power` | `pv('Load-1', 'active_power') - pv('PV-1', 'p_ac') - pv('PCS-1', 'p_actual')` |
+
+Signs: PCS power is + discharge / - charge; meter power is + import / - export, and its import / export energy
+counters integrate it. Behaviors run device by device in file order, so the meter (listed last) uses values of the
+same tick. Try: write holding 0 = 200 (20.0 kW) and coil 0 = 1 on unit 3, then watch the meter import fall by 20 kW
+and BMS-1 `soc` decrease.

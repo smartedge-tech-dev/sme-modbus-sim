@@ -17,13 +17,13 @@ First release (0.1.0): a Modbus device simulator with a live web UI.
 - Data types `bool`, `bit`, `uint16`, `int16`, `uint32`, `int32`, `float32`, `uint64`, `int64`, `float64`, `string`, `enum`, `sunspec_sf`, with byte order / word order (ABCD, CDAB, BADC, DCBA), scale, offset, `scale_ref` and `nullable` points.
 
 **Simulation**
-- Behaviors `sine`, `random`, `random_walk`, `expr`, `follow`, `ramp`, `counter`, `pulse`, `replay` (CSV); min / max clamping, integer counter wrap-around, read-only point protection; cross-device coupling (the demo site couples PCS, BMS and meter).
+- Behaviors `sine`, `random`, `random_walk`, `expr`, `follow`, `ramp`, `counter`, `pulse`, `replay` (CSV); min / max clamping, integer counter wrap-around, read-only point protection; cross-device coupling (the demo site couples PCS, BMS and meter; `configs/demo-coupled-site.yaml` adds a PV / load / battery / grid-meter site whose meter balances load − PV − battery).
 - Fault injection: runtime rules (exception, delay, no response, disconnect, bad CRC, truncation, wrong ids, busy, freeze, refuse connections) via the Faults tab, `/api/faults` and YAML / JSON presets.
 
 **Configuration and templates**
 - YAML configuration (validated with pydantic) with automatic address allocation for template points, per-device undefined-address policy and device identification fields.
 - Generic templates `battery_pcs`, `bms`, `power_meter`, `env_sensor`, `custom`.
-- SunSpec templates `sunspec_pv_inverter` / `sunspec_meter`, generated from the public SunSpec model definitions (Apache-2.0; vendored from sunspec/models @ 90b4a33). Not affiliated with, endorsed by, or certified by SunSpec Alliance.
+- SunSpec templates `sunspec_pv_inverter` / `sunspec_meter` / `sunspec_der` (models 701–705) / `sunspec_battery` (models 802 / 803), generated from the public SunSpec model definitions (Apache-2.0; vendored from sunspec/models @ 90b4a33). Not affiliated with, endorsed by, or certified by SunSpec Alliance.
 - User-local templates in `~/.sme-modbus-sim/templates/` (`--templates-dir`, `SME_MODBUS_SIM_TEMPLATES`), reload from the UI, and save a device as a template.
 - Excel point table: export / blank template / import (sheets `Listeners`, `Devices`, `Points`; `extra` YAML column; Modicon `40001` addresses; errors reported by sheet, row and column).
 

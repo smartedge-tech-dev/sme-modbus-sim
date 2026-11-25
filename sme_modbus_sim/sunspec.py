@@ -79,6 +79,18 @@ def _count(g: Dict[str, Any], counts: Dict[str, int]) -> int:
     return int(counts.get(g["name"], c))
 
 
+def _count_points(g: Dict[str, Any], counts: Dict[str, int]) -> Dict[str, int]:
+    """Count-holding point name -> group count, for all (nested) groups of ``g`` (e.g. model 705 ``NCrv`` /
+    ``NPt``, where ``NPt`` sits at the top level but counts the ``Pt`` groups nested in each ``Crv``)."""
+    out: Dict[str, int] = {}
+    for sub in g.get("groups", []):
+        if isinstance(sub.get("count"), str):
+            out.setdefault(sub["count"], _count(sub, counts))
+        for k, v in _count_points(sub, counts).items():
+            out.setdefault(k, v)
+    return out
+
+
 def model_length(model_id: int, counts: Optional[Dict[str, int]] = None) -> int:
     """Model length ``L`` (registers after ``ID`` and ``L``)."""
     return _group_size(load_model(model_id)["group"], counts or {}) - 2
@@ -95,7 +107,7 @@ def build_points(models: Sequence[int], base_address: int = 40000,
     of a single nested group ``m<id>_<group>_<Name>``. ``values`` sets initial values by point name and
     ``overrides`` merges extra fields (behavior, min, max, ...). A point without a value is 0 / "" when the
     model marks it mandatory, otherwise ``None`` = SunSpec "not implemented". ``counts`` gives repeating-group
-    counts per model id (``{160: {"module": 2}}``); the point holding the count gets that value.
+    counts per model id (``{160: {"module": 2}}``, nested groups by name: ``{705: {"Crv": 3, "Pt": 4}}``); the point holding the count gets that value.
     """
     values, overrides, counts = dict(values or {}), dict(overrides or {}), dict(counts or {})
     if base_address not in BASE_ADDRESSES:
@@ -109,9 +121,8 @@ def build_points(models: Sequence[int], base_address: int = 40000,
         nonlocal addr
         local: Dict[str, str] = {}
         scope = [local, *scope]
-        # count points referenced by sub-groups (e.g. "N") take the group count
-        count_points = {sub["count"]: _count(sub, mcounts) for sub in g.get("groups", [])
-                        if isinstance(sub.get("count"), str)}
+        # count points referenced by (nested) sub-groups (e.g. "N", "NCrv", "NPt") take the group count
+        count_points = _count_points(g, mcounts)
         for p in g["points"]:
             local[p["name"]] = f"{prefix}m{mid}_{label}{p['name']}"
         for p in g["points"]:

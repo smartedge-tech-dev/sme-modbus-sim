@@ -411,7 +411,179 @@ def _sunspec_meter(p):
     return ss.build_points([1, 203], int(p["base_address"]), vals, ov)
 
 
-for _name in ("sunspec_pv_inverter", "sunspec_meter"):
+@template("sunspec_der", "SunSpec DER (models 1, 701-705)",
+          {"rated_w": 10000, "ac_voltage_v": 230, "frequency_hz": 50, "vv_curves": 3, "vv_points": 4,
+           "serial_number": "SIM-DER-0001", "base_address": 40000})
+def _sunspec_der(p):
+    from . import sunspec as ss
+
+    rated, vac, hz = _num(p, "rated_w"), _num(p, "ac_voltage_v"), _num(p, "frequency_hz")
+    ncrv, npt = max(1, int(p["vv_curves"])), max(1, int(p["vv_points"]))
+    w_sf = ss.sf_for(rated * 1.3)
+    a_rtg = rated / (3 * vac)
+    a_sf = ss.sf_for(a_rtg * 1.3, 32767, -2)
+    vals: Dict[str, Any] = {
+        **_sunspec_common("SME-SIM-DER", p["serial_number"]),
+        # 701 DER AC measurement
+        "m701_ACType": 2, "m701_St": 1, "m701_InvSt": 7, "m701_ConnSt": 1, "m701_Alrm": 0, "m701_DERMode": 0,
+        "m701_LNV": vac, "m701_LLV": vac * 3 ** 0.5, "m701_Hz": hz, "m701_PF": 1, "m701_TmpCab": 25,
+        "m701_A_SF": a_sf, "m701_V_SF": -1, "m701_Hz_SF": -2, "m701_W_SF": w_sf, "m701_PF_SF": -3,
+        "m701_VA_SF": w_sf, "m701_Var_SF": w_sf, "m701_TotWh_SF": 0, "m701_TotVarh_SF": 0, "m701_Tmp_SF": -1,
+        # 702 capacity (ratings + adjustable settings)
+        "m702_WMaxRtg": rated, "m702_VAMaxRtg": rated, "m702_VarMaxInjRtg": rated * 0.44,
+        "m702_VarMaxAbsRtg": rated * 0.44, "m702_WChaRteMaxRtg": rated, "m702_WDisChaRteMaxRtg": rated,
+        "m702_VNomRtg": vac, "m702_VMaxRtg": vac * 1.1, "m702_VMinRtg": vac * 0.88, "m702_AMaxRtg": a_rtg,
+        "m702_NorOpCatRtg": 1, "m702_AbnOpCatRtg": 2, "m702_WMax": rated, "m702_VAMax": rated,
+        "m702_VarMaxInj": rated * 0.44, "m702_VarMaxAbs": rated * 0.44, "m702_WChaRteMax": rated,
+        "m702_WDisChaRteMax": rated, "m702_VNom": vac, "m702_VMax": vac * 1.1, "m702_VMin": vac * 0.88,
+        "m702_AMax": a_rtg, "m702_W_SF": w_sf, "m702_VA_SF": w_sf, "m702_Var_SF": w_sf, "m702_V_SF": -1,
+        "m702_A_SF": a_sf, "m702_PF_SF": -3,
+        # 703 enter service
+        "m703_ES": 1, "m703_ESVHi": 105, "m703_ESVLo": 91.7, "m703_ESHzHi": hz * 1.002, "m703_ESHzLo": hz * 0.99,
+        "m703_ESDlyTms": 300, "m703_ESRndTms": 0, "m703_ESRmpTms": 300, "m703_ESDlyRemTms": 0,
+        "m703_V_SF": -1, "m703_Hz_SF": -2,
+        # 704 AC controls
+        "m704_PFWInjEna": 0, "m704_PFWAbsEna": 0, "m704_WMaxLimPctEna": 0, "m704_WMaxLimPct": 100,
+        "m704_WSetEna": 0, "m704_WSetMod": 1, "m704_WSet": 0, "m704_WSetPct": 0, "m704_VarSetEna": 0,
+        "m704_VarSetMod": 4, "m704_VarSetPri": 0, "m704_VarSet": 0, "m704_VarSetPct": 0, "m704_WRmp": 100,
+        "m704_WRmpRef": 1, "m704_AntiIslEna": 1, "m704_PFWInj_PF": 1, "m704_PFWInj_Ext": 0,
+        "m704_PFWAbs_PF": 1, "m704_PFWAbs_Ext": 1, "m704_PF_SF": -3, "m704_WMaxLimPct_SF": 0,
+        "m704_WSet_SF": 0, "m704_WSetPct_SF": -1, "m704_VarSet_SF": 0, "m704_VarSetPct_SF": -1,
+        # 705 volt-var (curve registers only; the curve is not executed)
+        "m705_Ena": 0, "m705_AdptCrvReq": 0, "m705_AdptCrvRslt": 1, "m705_V_SF": -2, "m705_DeptRef_SF": -2,
+        "m705_RspTms_SF": 0,
+    }
+    wmax = "m702_WMax"
+    pv_avail = f"{rated} * max(0, sin(pi * (hour - 6) / 12))"
+    setpoint = f"(m704_WSet if m704_WSetMod == 1 else m704_WSetPct / 100 * {wmax})"
+    raw = f"({setpoint} if m704_WSetEna == 1 else {pv_avail})"
+    cap = f"({wmax} * (m704_WMaxLimPct / 100 if m704_WMaxLimPctEna == 1 else 1))"
+    target = f"(0 if m703_ES != 1 else max(-m702_WChaRteMax, min({raw}, {cap})))"
+    up = f"max(m704_WRmp, 1) / 100 * {wmax}"
+    var_sp = ("(m704_VarSet if m704_VarSetMod == 4 else m704_VarSetPct / 100 * ("
+              f"{wmax} if m704_VarSetMod == 0 else m702_VAMax if m704_VarSetMod == 3 else "
+              "sqrt(max(m702_VAMax ** 2 - m701_W ** 2, 0)) if m704_VarSetMod == 2 else m702_VarMaxInj))")
+    ov: Dict[str, Dict[str, Any]] = {
+        # WRmp (% of WMax per second) limits increases; decreases follow (almost) at once
+        "m701_W": {"behavior": {"type": "ramp", "target": target,
+                                "rate": f"({up}) if {target} > m701_W else 10 * {wmax}"}},
+        "m701_Var": _expr("0 if m703_ES != 1 or m704_VarSetEna != 1 else "
+                          f"max(-m702_VarMaxAbs, min({var_sp}, m702_VarMaxInj))"),
+        "m701_VA": _expr("sqrt(m701_W ** 2 + m701_Var ** 2)"),
+        "m701_PF": _expr("1 if m701_VA < 1e-6 else abs(m701_W) / m701_VA"),
+        "m701_A": _expr("m701_VA / 3 / max(m701_LNV, 1)"),
+        "m701_LNV": _expr("(m701_VL1 + m701_VL2 + m701_VL3) / 3"),
+        "m701_LLV": _expr("(m701_VL1L2 + m701_VL2L3 + m701_VL3L1) / 3"),
+        "m701_Hz": _walk(hz, 0.001, 0.005),
+        "m701_TotWhInj": _counter("max(m701_W, 0) / 3600"),
+        "m701_TotWhAbs": _counter("max(-m701_W, 0) / 3600"),
+        "m701_TotVarhInj": _counter("max(m701_Var, 0) / 3600"),
+        "m701_TotVarhAbs": _counter("max(-m701_Var, 0) / 3600"),
+        "m701_TmpCab": {"behavior": {"type": "follow", "target": f"25 + abs(m701_W) / {rated} * 20", "tau": 600}},
+        "m701_St": _expr("int(m703_ES == 1)"),
+        "m701_ConnSt": _expr("int(m703_ES == 1)"),
+        "m701_InvSt": _expr(f"0 if m703_ES != 1 else (4 if m704_WMaxLimPctEna == 1 and m701_W > 0 "
+                            f"and m701_W >= {cap} - 1 else (3 if abs(m701_W) > 0 else 7))"),
+        "m703_ES": {"min": 0, "max": 1},
+        "m704_WMaxLimPctEna": {"min": 0, "max": 1}, "m704_WMaxLimPct": {"min": 0, "max": 100},
+        "m704_WSetEna": {"min": 0, "max": 1}, "m704_WSetMod": {"min": 0, "max": 1},
+        "m704_WSetPct": {"min": -100, "max": 100}, "m704_VarSetEna": {"min": 0, "max": 1},
+        "m704_VarSetMod": {"min": 0, "max": 4}, "m704_VarSetPct": {"min": -100, "max": 100},
+        "m704_WRmp": {"min": 1, "max": 10000},
+        "m705_Ena": {"min": 0, "max": 1}, "m705_AdptCrvReq": {"min": 0, "max": ncrv},
+    }
+    for i, (ln, pair) in enumerate((("L1", "L1L2"), ("L2", "L2L3"), ("L3", "L3L1"))):
+        nxt = ("L2", "L3", "L1")[i]
+        vals[f"m701_V{ln}"] = vac
+        ov[f"m701_V{ln}"] = _walk(vac, 0.02, vac * 0.001)
+        ov[f"m701_V{pair}"] = _expr(f"(m701_V{ln} + m701_V{nxt}) / 2 * sqrt(3)")
+        ov[f"m701_W{ln}"] = _expr("m701_W / 3")
+        ov[f"m701_VA{ln}"] = _expr("m701_VA / 3")
+        ov[f"m701_Var{ln}"] = _expr("m701_Var / 3")
+        ov[f"m701_PF{ln}"] = _expr("m701_PF")
+        ov[f"m701_A{ln}"] = _expr(f"m701_VA / 3 / max(m701_V{ln}, 1)")
+        ov[f"m701_TotWhInj{ln}"] = _counter("max(m701_W, 0) / 3 / 3600")
+        ov[f"m701_TotWhAbs{ln}"] = _counter("max(-m701_W, 0) / 3 / 3600")
+    # illustrative default volt-var curve (V in % of VNom, Var in % per DeptRef = VAR_MAX_PCT)
+    span = max(npt - 1, 1)
+    v_pts = [92, 98, 102, 108] if npt == 4 else [round(90 + 20 * k / span, 2) for k in range(npt)]
+    q_pts = [44, 0, 0, -44] if npt == 4 else [round(44 - 88 * k / span, 2) for k in range(npt)]
+    for c in range(1, ncrv + 1):
+        m = f"m705_Crv{c}_"
+        vals.update({f"{m}ActPt": npt, f"{m}DeptRef": 1, f"{m}Pri": 1, f"{m}VRef": 100, f"{m}VRefAutoEna": 0,
+                     f"{m}RspTms": 10, f"{m}ReadOnly": int(c == 1)})
+        for k in range(1, npt + 1):
+            vals.update({f"{m}Pt{k}_V": v_pts[k - 1], f"{m}Pt{k}_Var": q_pts[k - 1]})
+    return ss.build_points([1, 701, 702, 703, 704, 705], int(p["base_address"]), vals, ov,
+                           {705: {"Crv": ncrv, "Pt": npt}})
+
+
+@template("sunspec_battery", "SunSpec battery (models 1, 802, 803)",
+          {"capacity_wh": 10000, "max_w": 5000, "dc_voltage_v": 400, "initial_soc": 50, "string_count": 2,
+           "der_device": "", "serial_number": "SIM-BAT-0001", "base_address": 40000})
+def _sunspec_battery(p):
+    from . import sunspec as ss
+
+    wh, wmax, vdc = _num(p, "capacity_wh"), _num(p, "max_w"), _num(p, "dc_voltage_v")
+    n = max(1, int(p["string_count"]))
+    w_sf = ss.sf_for(wmax * 1.3)
+    amax = wmax / vdc
+    a_sf = ss.sf_for(amax * 1.3, 32767, -2)
+    vals: Dict[str, Any] = {
+        **_sunspec_common("SME-SIM-BATTERY", p["serial_number"]),
+        # 802 battery base
+        "m802_AHRtg": wh / vdc, "m802_AHRtg_SF": ss.sf_for(wh / vdc, 65535, -1),
+        "m802_WHRtg": wh, "m802_WHRtg_SF": ss.sf_for(wh, 65535),
+        "m802_WChaRteMax": wmax, "m802_WDisChaRteMax": wmax, "m802_WChaDisChaMax_SF": ss.sf_for(wmax, 65535),
+        "m802_SoCMax": 95, "m802_SoCMin": 5, "m802_SoC": _num(p, "initial_soc"), "m802_SoC_SF": -1,
+        "m802_DoD_SF": -1, "m802_SoH": 100, "m802_SoH_SF": -1, "m802_NCyc": 0, "m802_LocRemCtl": 0,
+        "m802_Typ": 4, "m802_State": 3, "m802_V": vdc, "m802_VMax": vdc * 1.15, "m802_VMin": vdc * 0.8,
+        "m802_V_SF": -1, "m802_CellV_SF": -3, "m802_A_SF": a_sf, "m802_AChaMax": amax, "m802_ADisChaMax": amax,
+        "m802_AMax_SF": a_sf, "m802_W_SF": w_sf, "m802_SetOp": 1, "m802_SetInvState": 3,
+        # 803 lithium-ion bank
+        "m803_NStr": n, "m803_CellV_SF": -3, "m803_ModTmp_SF": -1, "m803_A_SF": a_sf, "m803_SoH_SF": -1,
+        "m803_SoC_SF": -1, "m803_V_SF": -1,
+    }
+    # W > 0 = discharging (simulator convention, same sign as model 701 W where generation is positive). Demo
+    # profile: charge by day, discharge at night; or follow the AC power of a linked sunspec_der device.
+    demand = _ref(p.get("der_device"), "m701_W", f"-{wmax} * 0.6 * sin(2 * pi * (hour - 6) / 24)")
+    req = f"max(-m802_WChaRteMax, min({demand}, m802_WDisChaRteMax))"
+    ov: Dict[str, Dict[str, Any]] = {
+        "m802_W": _expr(f"0 if m802_SetOp == 2 else ({req} if ({req} > 0 and m802_SoC > m802_SoCMin) "
+                        f"or ({req} < 0 and m802_SoC < m802_SoCMax) else 0)"),
+        "m802_SoC": {"behavior": {"type": "counter", "rate": f"-m802_W / {wh} * 100 / 3600"}, "min": 0, "max": 100},
+        "m802_DoD": _expr("100 - m802_SoC"),
+        "m802_V": _expr(f"{vdc} * (0.95 + 0.1 * m802_SoC / 100)"),
+        "m802_A": _expr("m802_W / max(m802_V, 1)"),
+        "m802_ChaSt": _expr("3 if m802_W > 0 else (4 if m802_W < 0 else (2 if m802_SoC <= m802_SoCMin else "
+                            "(5 if m802_SoC >= m802_SoCMax else 6)))"),
+        "m802_State": _expr("1 if m802_SetOp == 2 else 3"),
+        "m802_Hb": _counter("1"),
+        "m802_CellVAvg": _expr("3.0 + 0.4 * m802_SoC / 100"),
+        "m802_CellVMax": _expr("m802_CellVAvg + 0.02"),
+        "m802_CellVMin": _expr("m802_CellVAvg - 0.02"),
+        "m802_SetOp": {"min": 1, "max": 2}, "m802_SetInvState": {"min": 1, "max": 3},
+        "m802_SocRsvMax": {"min": 0, "max": 100}, "m802_SoCRsvMin": {"min": 0, "max": 100},
+        "m803_NStrCon": _expr(f"0 if m802_SetOp == 2 else {n}"),
+        "m803_ModTmpAvg": {"behavior": {"type": "follow", "target": f"25 + abs(m802_W) / {wmax} * 10",
+                                        "tau": 900}},
+        "m803_ModTmpMax": _expr("m803_ModTmpAvg + 1"),
+        "m803_ModTmpMin": _expr("m803_ModTmpAvg - 1"),
+        "m803_StrVAvg": _expr("m802_V"),
+        "m803_StrAAvg": _expr(f"m802_A / {n}"),
+    }
+    for i in range(1, n + 1):
+        m = f"m803_string{i}_"
+        vals.update({f"{m}StrNMod": 8, f"{m}StrSt": 0, f"{m}StrSoH": 100, f"{m}StrEvt1": 0})
+        ov.update({f"{m}StrSoC": _expr("m802_SoC"), f"{m}StrA": _expr(f"m802_A / {n}"),
+                   f"{m}StrCellVAvg": _expr("m802_CellVAvg"), f"{m}StrCellVMax": _expr("m802_CellVMax"),
+                   f"{m}StrCellVMin": _expr("m802_CellVMin"), f"{m}StrModTmpAvg": _expr("m803_ModTmpAvg"),
+                   f"{m}StrModTmpMax": _expr("m803_ModTmpMax"), f"{m}StrModTmpMin": _expr("m803_ModTmpMin"),
+                   f"{m}StrConSt": _expr("int(m802_SetOp != 2)")})
+    return ss.build_points([1, 802, 803], int(p["base_address"]), vals, ov, {803: {"string": n}})
+
+
+for _name in ("sunspec_pv_inverter", "sunspec_meter", "sunspec_der", "sunspec_battery"):
     TEMPLATES[_name]["description"] = SUNSPEC_NOTE
 
 

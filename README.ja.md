@@ -117,7 +117,7 @@ client.close()
 今後の候補: Modbus ASCII、UDP、シリアル診断ファンクションコード（07 / 08 / 0B / 0C / 11）、Modbus/TCP Security（TLS）、
 SunSpec DER・蓄電池モデル、実機のスキャン / 記録によるポイント一覧作成。
 
-> SunSpec Alliance とは提携・推奨・認証の関係にありません。`sunspec_pv_inverter`（モデル 1, 103, 120-123, 160）と `sunspec_meter`（モデル 1, 203）テンプレートは、公開されている SunSpec モデル定義（Apache-2.0）から生成した、SunSpec Modbus モデルを実装するものです。特定メーカーのレジスタマップは内蔵していません。お手元のマップは Excel またはユーザーローカルテンプレートで非公開のまま取り込めます。
+> SunSpec Alliance とは提携・推奨・認証の関係にありません。`sunspec_pv_inverter`（モデル 1, 103, 120-123, 160）、`sunspec_meter`（モデル 1, 203）、`sunspec_der`（モデル 1, 701-705）、`sunspec_battery`（モデル 1, 802, 803）テンプレートは、公開されている SunSpec モデル定義（Apache-2.0）から生成した、SunSpec Modbus モデルを実装するものです。特定メーカーのレジスタマップは内蔵していません。お手元のマップは Excel またはユーザーローカルテンプレートで非公開のまま取り込めます。
 
 ## 商用サポート・カスタム開発
 
