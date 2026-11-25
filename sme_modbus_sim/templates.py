@@ -41,9 +41,9 @@ def _num(p: Dict[str, Any], key: str) -> float:
 
 @template("battery_pcs", "Battery PCS (generic)",
           {"rated_kw": 50, "rated_kvar": 50, "ac_voltage_v": 400, "frequency_hz": 50,
-           "dc_voltage_v": 716.8, "bms_device": "", "ramp_tau_s": 5})
+           "dc_voltage_v": 716.8, "bms_device": "", "ramp_kw_per_s": 10})
 def _battery_pcs(p):
-    kw, kvar, tau = _num(p, "rated_kw"), _num(p, "rated_kvar"), _num(p, "ramp_tau_s")
+    kw, kvar, rate = _num(p, "rated_kw"), _num(p, "rated_kvar"), _num(p, "ramp_kw_per_s")
     vac, hz = _num(p, "ac_voltage_v"), _num(p, "frequency_hz")
     soc = _ref(p.get("bms_device"), "soc", "50")
     dc_v = _ref(p.get("bms_device"), "pack_voltage", str(_num(p, "dc_voltage_v")))
@@ -65,11 +65,11 @@ def _battery_pcs(p):
          "description": "3 (Fault) is latched until run_command is cleared",
          "behavior": {"type": "expr", "expr": "0 if not run_command else (3 if state == 3 else 2)"}},
         {"name": "p_actual", "table": "input", "address": 1, "datatype": "int16", "scale": 0.1, "units": "kW",
-         "value": 0, "behavior": {"type": "follow", "target": p_target, "tau": tau}},
+         "value": 0, "behavior": {"type": "ramp", "target": p_target, "rate": rate}},
         {"name": "q_actual", "table": "input", "address": 2, "datatype": "int16", "scale": 0.1,
          "units": "kvar", "value": 0,
-         "behavior": {"type": "follow", "target": f"clamp(q_setpoint, -{kvar}, {kvar}) * (state == 2)",
-                      "tau": tau}},
+         "behavior": {"type": "ramp", "target": f"clamp(q_setpoint, -{kvar}, {kvar}) * (state == 2)",
+                      "rate": rate}},
         {"name": "ac_voltage", "table": "input", "address": 3, "datatype": "uint16", "scale": 0.1, "units": "V",
          "value": vac, "behavior": {"type": "random_walk", "min": vac * 0.98, "max": vac * 1.02,
                                     "step": vac * 0.001}},

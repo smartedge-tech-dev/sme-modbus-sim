@@ -6,7 +6,7 @@ from sme_modbus_sim.behaviors import BEHAVIORS, ExpressionError, compile_expr, i
 
 
 def test_eight_kinds_registered():
-    assert set(BEHAVIORS) == {"sine", "random", "random_walk", "expr", "follow", "counter", "pulse", "replay"}
+    assert set(BEHAVIORS) == {"sine", "random", "random_walk", "expr", "follow", "ramp", "counter", "pulse", "replay"}
 
 
 def test_static_and_unknown():
@@ -41,3 +41,24 @@ def test_follow_counter_pulse_sine_walk():
     assert s.step({"t": 1.0}, None, 1.0) == pytest.approx(10.0)
     w = make_behavior({"type": "random_walk", "min": 0, "max": 1, "step": 5})
     assert 0 <= w.step({}, 0.5, 1.0) <= 1
+
+
+def test_ramp_slew_limit():
+    r = make_behavior({"type": "ramp", "target": "sp", "rate": 10})
+    assert r.step({"sp": 50}, 0.0, 1.0) == pytest.approx(10.0)
+    assert r.step({"sp": 50}, 45.0, 1.0) == pytest.approx(50.0)  # within one step: snaps to target
+    assert r.step({"sp": -50}, 0.0, 0.5) == pytest.approx(-5.0)
+    assert r.step({"sp": 7}, None, 1.0) == 7  # no current value yet: start at the target
+    r2 = make_behavior({"type": "ramp", "target": "sp * 2", "rate": "k"})
+    assert r2.step({"sp": 10, "k": 4}, 0.0, 2.0) == pytest.approx(8.0)
+    with pytest.raises(ValueError, match="missing parameter"):
+        make_behavior({"type": "ramp", "rate": 1})
+
+
+def test_battery_pcs_uses_ramp():
+    from sme_modbus_sim.config import DeviceConfig
+    from sme_modbus_sim.templates import expand_device
+    pts = {p.name: p for p in expand_device(DeviceConfig(name="P", unit_id=1, template="battery_pcs",
+                                                         params={"ramp_kw_per_s": 3}))}
+    for n in ("p_actual", "q_actual"):
+        assert pts[n].behavior["type"] == "ramp" and pts[n].behavior["rate"] == 3

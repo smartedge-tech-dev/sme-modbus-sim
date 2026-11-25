@@ -18,7 +18,7 @@ devices:
     description: Battery power conversion system
     unit_id: 1
     template: battery_pcs
-    params: {rated_kw: 50, rated_kvar: 50, bms_device: BMS-1, ramp_tau_s: 5}
+    params: {rated_kw: 50, rated_kvar: 50, bms_device: BMS-1, ramp_kw_per_s: 10}
     identification: {vendor_name: SmartEdge, product_code: SIM-PCS, revision: "0.1"}
 
   - name: BMS-1

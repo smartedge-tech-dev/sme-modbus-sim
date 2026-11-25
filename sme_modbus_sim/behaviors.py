@@ -138,6 +138,30 @@ class Follow(Behavior):
         return v + (_random.uniform(-self.noise, self.noise) if self.noise else 0)
 
 
+class Ramp(Behavior):
+    """Slew-rate limited tracking: moves toward ``target`` by at most ``rate`` units per (sim) second.
+
+    ``target`` is an expression (a plain point name works too); ``rate`` is a number or an expression.
+    Typical use: a PCS active power output following its setpoint (kW/s).
+    """
+
+    def __init__(self, spec):
+        super().__init__(spec)
+        self.target = compile_expr(spec["target"])
+        self.rate = compile_expr(spec.get("rate", 1))
+
+    def step(self, names, current, dt):
+        target = float(self.target(names))
+        if current is None:
+            return target
+        cur = float(current)
+        limit = abs(float(self.rate(names))) * dt
+        diff = target - cur
+        if abs(diff) <= limit:
+            return target
+        return cur + math.copysign(limit, diff)
+
+
 class Counter(Behavior):
     """Integrates a rate expression (units per second), e.g. energy from power."""
 
@@ -343,6 +367,7 @@ BEHAVIORS = {
     "random_walk": RandomWalk,
     "expr": Expr,
     "follow": Follow,
+    "ramp": Ramp,
     "counter": Counter,
     "pulse": Pulse,
     "replay": Replay,
