@@ -75,3 +75,23 @@ client.close()
 ```
 
 設定ファイルのアドレスは 0 始まりのプロトコルアドレスです。modpoll は `-0` を付けない限り 1 始まりで数えます。
+
+## 実機のスキャンと記録
+
+どちらのコマンドも **読み取り専用**（FC 01/02/03/04 と 2B/0E のみ送信）で、送信レートを制限し（`--rate`、既定
+10 リクエスト/秒）、推定リクエスト数を含む概要を表示してから `Proceed? [y/N]` で確認します
+（`-y` で確認を省略。端末がなく `-y` もない場合は中止します）。
+
+```bash
+# 読み取り可能なアドレスを探索してデータ型を推定 -> ユーザーテンプレート（推定は YAML コメント）
+sme-modbus-sim scan --host 192.168.1.50 --unit 1 --range holding:0-199 --range input:0-99 --name meter1 -o meter1.yaml
+# シリアル RTU: --serial COM5 --baudrate 9600 --parity N、RTU over TCP: --transport rtu_over_tcp
+
+# テンプレート（または -c site.yaml --device NAME）のポイントを周期読み出しして replay 用 CSV に記録
+sme-modbus-sim record --host 192.168.1.50 --unit 1 --template meter1.yaml --period 1 --duration 600 -o meter1.csv
+```
+
+データ型は推定です。使う前に確認してください（使うにはテンプレートをユーザーテンプレートディレクトリへコピー）。
+読み取りに失敗したセルは空になります。replay は空セルで直前の値を保持しますが、最初のデータ行の空セルは
+エラーになるため、CSV を使う前に埋めてください。Web UI からは `/api/scan/*` と `/api/record/*`
+（同時に 1 ジョブ）で同じ操作ができます。

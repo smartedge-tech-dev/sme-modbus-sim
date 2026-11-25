@@ -16,6 +16,9 @@ First release (0.1.0): a Modbus device simulator with a live web UI.
 - One listener serves many unit IDs and one device can be attached to several listeners; `unit_id_mode` `strict` / `any`, `unknown_unit` `ignore` / `exception`.
 - Data types `bool`, `bit`, `uint16`, `int16`, `uint32`, `int32`, `float32`, `uint64`, `int64`, `float64`, `string`, `enum`, `sunspec_sf`, with byte order / word order (ABCD, CDAB, BADC, DCBA), scale, offset, `scale_ref` and `nullable` points.
 
+**Scan and record**
+- Read-only `scan` / `record` of a real device (Modbus TCP, RTU over TCP, serial RTU; only FC 01/02/03/04 and 2B/0E are ever sent, rate-limited, per-request timeout): `scan` finds readable addresses in the given ranges, samples them and suggests datatypes (float32 ABCD / CDAB, int32, int16, string, bool) with a confidence and reason, then saves a user template or adds a device; `record` polls points into a replay CSV. CLI subcommands with a confirmation prompt (`-y` to skip), and `/api/scan/*` / `/api/record/*` background jobs (one at a time, cancellable, progress as WebSocket event `scan`).
+
 **Simulation**
 - Behaviors `sine`, `random`, `random_walk`, `expr`, `follow`, `ramp`, `counter`, `pulse`, `replay` (CSV); min / max clamping, integer counter wrap-around, read-only point protection; cross-device coupling (the demo site couples PCS, BMS and meter; `configs/demo-coupled-site.yaml` adds a PV / load / battery / grid-meter site whose meter balances load − PV − battery).
 - Fault injection: runtime rules (exception, delay, no response, disconnect, bad CRC, truncation, wrong ids, busy, freeze, refuse connections) via the Faults tab, `/api/faults` and YAML / JSON presets.

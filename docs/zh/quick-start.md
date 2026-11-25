@@ -75,3 +75,21 @@ client.close()
 ```
 
 配置文件中的地址是从 0 开始的协议地址；modpoll 不加 `-0` 时从 1 开始计数。
+
+## 扫描与录制实机
+
+两个命令都是**只读**的（只发送 FC 01/02/03/04 与 2B/0E），带限速（`--rate`，默认每秒 10 个请求），
+执行前会显示含预估请求数的概要并询问 `Proceed? [y/N]`（`-y` 跳过确认；没有终端又没有 `-y` 时直接中止）。
+
+```bash
+# 探测可读地址并推测数据类型 -> 用户模板（推测结果写成 YAML 注释）
+sme-modbus-sim scan --host 192.168.1.50 --unit 1 --range holding:0-199 --range input:0-99 --name meter1 -o meter1.yaml
+# 串口 RTU：--serial COM5 --baudrate 9600 --parity N；RTU over TCP：--transport rtu_over_tcp
+
+# 按周期读取模板（或 -c site.yaml --device NAME）中的点，写成 replay 用 CSV
+sme-modbus-sim record --host 192.168.1.50 --unit 1 --template meter1.yaml --period 1 --duration 600 -o meter1.csv
+```
+
+数据类型只是推测，使用前请核对（把模板复制到用户模板目录即可使用）。读取失败的单元格留空；replay 对空单元格
+沿用上一个值，但第一行数据中的空单元格会报错，使用 CSV 前请补上。Web UI 通过 `/api/scan/*` 与
+`/api/record/*` 提供同样的功能（同一时间只允许一个作业）。

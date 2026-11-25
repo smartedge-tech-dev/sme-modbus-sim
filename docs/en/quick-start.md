@@ -76,3 +76,23 @@ client.close()
 ```
 
 Addresses in the configuration are 0-based protocol addresses; modpoll counts from 1 unless `-0` is given.
+
+## Scan and record a real device
+
+Both commands are **read-only** (only FC 01/02/03/04 and 2B/0E are sent), rate-limited (`--rate`, default 10
+requests/s) and print a summary with the estimated request count before asking `Proceed? [y/N]`
+(`-y` skips the question; without a terminal and without `-y` they abort).
+
+```bash
+# discover readable addresses and guess datatypes -> user template (guesses as YAML comments)
+sme-modbus-sim scan --host 192.168.1.50 --unit 1 --range holding:0-199 --range input:0-99 --name meter1 -o meter1.yaml
+# serial RTU: --serial COM5 --baudrate 9600 --parity N; RTU over TCP: --transport rtu_over_tcp
+
+# poll the points of a template (or -c site.yaml --device NAME) into a replay CSV
+sme-modbus-sim record --host 192.168.1.50 --unit 1 --template meter1.yaml --period 1 --duration 600 -o meter1.csv
+```
+
+Datatypes are guesses: check them before use (copy the template into the user template directory to use it).
+Failed reads leave an empty cell; replay holds the previous value for empty cells, but an empty cell in the
+first data row is rejected, so fill it in before using the CSV. The web UI offers the same through
+`/api/scan/*` and `/api/record/*` (one job at a time).

@@ -455,6 +455,9 @@ class Engine(BaseEngine):
                 self.log_event("info", f"listener {lid} ({s.framer}) on {s.endpoint}")
 
     async def stop(self) -> None:
+        jobs = getattr(self, "scan_jobs", None)  # set by web.create_app; absent in engine-only use
+        if jobs is not None:
+            await jobs.stop()
         await super().stop()
         for s in self.servers.values():
             await s.stop()
