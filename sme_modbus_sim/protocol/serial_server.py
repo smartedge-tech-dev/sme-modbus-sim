@@ -32,6 +32,7 @@ import time
 from typing import Callable, Iterable
 
 from .framer import DroppedFrame, Frame, RtuFramer
+from .pty_port import PTY_PORT, PtyPort
 from .pdu import describe_request, describe_response, exception_response, handle_pdu, is_write
 from .server import UNIT_ID_MODES, PduHandler, Resolver, TraceEvent, encode_response
 from .store import UnitStore
@@ -76,6 +77,7 @@ class ModbusSerialServer:
         strict_timing: bool = False,
         serial_factory: Callable[..., object] | None = None,
         faults=None,
+        link: str | None = None,
     ) -> None:
         if parity not in PARITIES:
             raise ValueError(f"invalid parity: {parity!r}")
@@ -100,6 +102,8 @@ class ModbusSerialServer:
         self.faults = faults
         self.strict_timing = strict_timing
         self.serial_factory = serial_factory
+        self.link = link
+        self.device: str | None = None  # pty: the slave end the device under test opens
         self.t15 = t15(self.baudrate)
         self.t35 = t35(self.baudrate)
         self.silence = self.t35 if strict_timing else max(self.t35, LENIENT_SILENCE_S)
@@ -113,7 +117,20 @@ class ModbusSerialServer:
     # ------------------------------------------------------------ properties
     @property
     def endpoint(self) -> str:
+        if self.is_pty:
+            return f"pty {self.display_port}" + (f" -> {self.device}" if self.link and self.device else "")
         return f"{self.port} {self.baudrate} {self.bytesize}{self.parity}{self.stopbits}"
+
+    @property
+    def is_pty(self) -> bool:
+        return self.port == PTY_PORT
+
+    @property
+    def display_port(self) -> str:
+        """Port name to show: for a pty, the path the device under test opens."""
+        if self.is_pty:
+            return self.link or self.device or PTY_PORT
+        return self.port
 
     @property
     def bound_port(self) -> None:
@@ -131,6 +148,10 @@ class ModbusSerialServer:
 
     # ------------------------------------------------------------ lifecycle
     def _open(self):
+        if self.is_pty and self.serial_factory is None:
+            ser = PtyPort(self.link, timeout=min(max(self.silence / 2, 0.001), MAX_POLL_S))
+            self.device = ser.device
+            return ser
         if self.serial_factory is not None:
             factory = self.serial_factory
         else:
@@ -149,7 +170,8 @@ class ModbusSerialServer:
             self._serial = await self._loop.run_in_executor(None, self._open)
         except Exception as e:  # noqa: BLE001 - SerialException, OSError, ValueError ...
             self._serial = None
-            self.error = f"cannot open serial port {self.port!r}: {e}"
+            self.error = (f"cannot create pty: {e}" if self.is_pty
+                          else f"cannot open serial port {self.port!r}: {e}")
             return
         self._thread = threading.Thread(target=self._reader, name=f"modbus-rtu-{self.listener_id}", daemon=True)
         self._thread.start()

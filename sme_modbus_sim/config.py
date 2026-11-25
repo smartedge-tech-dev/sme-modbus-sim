@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import Field, field_validator, model_validator
 from sme_sim_common import config as _common
 from sme_sim_common.behaviors import ENGINE_NAMES, check_point_names, reserved_names
+from .protocol.pty_port import PTY_PORT, pty_supported
 from sme_sim_common.config import StrictModel, atomic_write_text, dump_yaml, replace_yaml_block
 
 __all__ = [
@@ -58,6 +59,8 @@ class ListenerConfig(_Model):
     ``strict_timing`` apply only to it. Defaults follow Modbus over Serial Line V1.02: 8 data bits,
     even parity, and 2 stop bits when parity is ``N`` (``N`` + 1 stop bit is accepted as a widespread
     but non-conforming setting).
+    ``port: pty`` (Linux / macOS / WSL2) creates a pseudo-terminal pair instead of opening a device;
+    the device under test opens the other end, reachable through the optional ``link`` symlink.
     """
 
     id: str = Field(min_length=1)
@@ -72,6 +75,7 @@ class ListenerConfig(_Model):
     parity: Optional[Literal["E", "N", "O"]] = None
     stopbits: Optional[Literal[1, 2]] = None
     strict_timing: Optional[bool] = None
+    link: Optional[str] = Field(default=None, min_length=1)
 
     @field_validator("port")
     @classmethod
@@ -82,14 +86,20 @@ class ListenerConfig(_Model):
         if kind == "rtu":
             if isinstance(v, bool) or not str(v).strip():
                 raise ValueError("type rtu needs a serial device (e.g. COM5, /dev/ttyUSB0) or a pyserial URL")
-            return str(v).strip()
+            v = str(v).strip()
+            if v.lower() == PTY_PORT:
+                if not pty_supported():
+                    raise ValueError("port: pty needs Linux, macOS or WSL2. On Windows use a signed virtual "
+                                     "serial port driver, a pair of USB-RS485 adapters, or type rtu_over_tcp")
+                return PTY_PORT
+            return v
         if isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 65535:
             raise ValueError(f"port must be a TCP port 1..65535 for type {kind}")
         return v
 
     @model_validator(mode="after")
     def _check(self) -> "ListenerConfig":
-        serial_fields = ("baudrate", "bytesize", "parity", "stopbits", "strict_timing")
+        serial_fields = ("baudrate", "bytesize", "parity", "stopbits", "strict_timing", "link")
         if self.type == "rtu":
             if "port" not in self.model_fields_set:
                 raise ValueError(f"listener {self.id!r}: type rtu needs port: a serial device "
@@ -104,6 +114,8 @@ class ListenerConfig(_Model):
                 self.stopbits = 2 if self.parity == "N" else 1
             if self.strict_timing is None:
                 self.strict_timing = False
+            if self.link is not None and self.port != PTY_PORT:
+                raise ValueError(f"listener {self.id!r}: link only applies to port: pty")
             return self
         used = [f for f in serial_fields if getattr(self, f) is not None]
         if used:
@@ -315,10 +327,14 @@ class SimConfig(_Model):
         dup_ep = sorted({f"{h}:{p}" for h, p in eps if eps.count((h, p)) > 1})
         if dup_ep:
             raise ValueError(f"listeners share the same host:port: {dup_ep}")
-        ports = [str(l.port) for l in self.listeners if l.type == "rtu"]
+        ports = [str(l.port) for l in self.listeners if l.type == "rtu" and l.port != PTY_PORT]
         dup_port = sorted({p for p in ports if ports.count(p) > 1})
         if dup_port:
             raise ValueError(f"serial listeners share the same port: {dup_port}")
+        links = [l.link for l in self.listeners if l.link]
+        dup_link = sorted({k for k in links if links.count(k) > 1})
+        if dup_link:
+            raise ValueError(f"pty listeners share the same link: {dup_link}")
         names = [d.name for d in self.devices]
         dup = sorted({n for n in names if names.count(n) > 1})
         if dup:

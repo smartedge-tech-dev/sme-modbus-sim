@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Serial listener `port: pty` (Linux, macOS, WSL2): ModbusSim creates a pseudo-terminal pair and the device under test opens the other end, optionally through a `link` symlink that is created at startup and removed on exit. No driver or root needed. The UI, the log and `/api/state` (`device`) show the path to open. Rejected at validation on Windows, with the alternatives in the message.
+
+### Fixed
+
+- Web UI: serial listeners were always shown as "not bound"; they now show their status and device instead of `host:port`.
+
 ## [0.1.0] - 2026-11-25
 
 ### Added

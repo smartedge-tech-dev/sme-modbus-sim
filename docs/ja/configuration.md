@@ -34,12 +34,13 @@ devices:
 |---|---|
 | `id` | `devices[].listeners` から参照する名前 |
 | `type` | `tcp`（Modbus TCP、MBAP）、`rtu_over_tcp`（TCP ソケット上の CRC-16 付き RTU フレーム）または `rtu`（シリアル回線） |
-| `host`, `port` | `tcp` / `rtu_over_tcp`: バインドアドレスと TCP ポート（既定 5020。1024 未満は権限が必要）。`rtu`: `port` はシリアルデバイス（`COM5`、`/dev/ttyUSB0`）または pyserial URL（`socket://host:port`、`rfc2217://...`）。`host` は無視 |
+| `host`, `port` | `tcp` / `rtu_over_tcp`: バインドアドレスと TCP ポート（既定 5020。1024 未満は権限が必要）。`rtu`: `port` はシリアルデバイス（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）、または `pty`（後述）。`host` は無視 |
 | `unit_id_mode` | `strict`: 設定済みのユニット ID のみ応答。`any`: すべてのユニット ID を `default_unit` に振り向ける |
 | `unknown_unit` | `strict` 時の動作。`ignore`（実際のバスと同様に無応答）または `exception`（ゲートウェイ例外） |
 | `default_unit` | `any` モード、および TCP のユニット ID 0 / 255 で使うユニット ID |
 | `baudrate`, `bytesize`, `parity`, `stopbits` | `rtu` のみ。既定 19200（規格の既定値）、8、`E`、1。`parity`: `E` / `O` / `N`。`N` の場合の既定ストップビットは 2（Serial Line V1.02）。`N` + `stopbits: 1` は一般的だが規格外の設定として受け付ける |
 | `strict_timing` | `rtu` のみ（既定 `false`）。`true`: フレーム内で t1.5 を超える間隔があれば破棄し、t3.5 ちょうどでフレーム終端とする。`false`: t1.5 を検査せず、max(t3.5, 20 ms) の無信号でフレーム終端（USB シリアル変換器はバイトをまとめて渡すため） |
+| `link` | `port: pty` のみ。pty ペアのうち被試験機側の端を指すシンボリックリンクのパス（例 `/tmp/ttyV0`） |
 
 ### シリアル RTU（`type: rtu`）
 
@@ -52,6 +53,21 @@ listeners:
 - ユニット ID 1〜247 は設定どおり応答。0 はブロードキャスト（書き込み系ファンクションコードをリスナー上の全デバイスで実行し、応答しない）。248〜255 は無視。
 - シリアル回線では `unknown_unit: exception` は効かない（未知のユニットは常に無応答）。
 - ポートを開けない場合、そのリスナーは `/api/state` で `status: error` となり、他のリスナーは動作を続ける。設定の再読み込みで再試行する。
+
+### 疑似端末ペア（`port: pty`）
+
+Linux、macOS、WSL2 では、ModbusSim 自身が仮想シリアルポートのペアを作成できます。ドライバも root も不要です。
+
+```yaml
+listeners:
+  - {id: vcom, type: rtu, port: pty, link: /tmp/ttyV0}
+```
+
+- ペアの一方は ModbusSim が保持し、被試験機は `link`（またはログ・UI・`/api/state` の `device` に表示される `/dev/pts/N`）をシリアルポートとして開く。
+- `link` は起動時に作成し、終了時に削除する。パスが既に存在する場合、リスナーは `status: error` となり、既存のファイルには触れない。書き込み可能なディレクトリに置くこと（`/dev` は root が必要）。
+- 被試験機はいつポートを閉じて開き直してもよい。
+- 制約: pty は RTS / CTS / DTR を伝えず、ボーレートとパリティは無視され、バイトの送出間隔も再現しない。t1.5 / t3.5 は試験できないため `strict_timing: false` のままにする。
+- Windows では使えない。設定検証がエラーとなり、署名済みの仮想シリアルポートドライバ、USB-RS485 変換器 2 台の相互接続、または `rtu_over_tcp` を案内する。
 
 ### ファンクションコード
 

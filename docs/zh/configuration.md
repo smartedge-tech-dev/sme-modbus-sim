@@ -34,12 +34,13 @@ devices:
 |---|---|
 | `id` | 供 `devices[].listeners` 引用的名称 |
 | `type` | `tcp`（Modbus TCP，MBAP）、`rtu_over_tcp`（TCP 套接字上带 CRC-16 的 RTU 帧）或 `rtu`（串口） |
-| `host`, `port` | `tcp` / `rtu_over_tcp`：绑定地址与 TCP 端口（默认 5020；1024 以下需要权限）。`rtu`：`port` 为串口设备（`COM5`、`/dev/ttyUSB0`）或 pyserial URL（`socket://host:port`、`rfc2217://...`），`host` 被忽略 |
+| `host`, `port` | `tcp` / `rtu_over_tcp`：绑定地址与 TCP 端口（默认 5020；1024 以下需要权限）。`rtu`：`port` 为串口设备（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）或 `pty`（见下文），`host` 被忽略 |
 | `unit_id_mode` | `strict`：只响应已配置的站号。`any`：所有站号都路由到 `default_unit` |
 | `unknown_unit` | `strict` 模式下：`ignore`（与真实总线一样不响应）或 `exception`（网关异常） |
 | `default_unit` | `any` 模式以及 TCP 站号 0 / 255 使用的站号 |
 | `baudrate`, `bytesize`, `parity`, `stopbits` | 仅 `rtu`。默认 19200（规格默认值）、8、`E`、1。`parity`：`E` / `O` / `N`；`N` 时默认 2 位停止位（Serial Line V1.02）。`N` + `stopbits: 1` 作为常见但不符合规格的设置也可接受 |
 | `strict_timing` | 仅 `rtu`（默认 `false`）。`true`：帧内字符间隔超过 t1.5 即丢弃该帧，静默恰好 t3.5 即帧结束。`false`：不检查 t1.5，静默 max(t3.5, 20 ms) 视为帧结束（USB 转串口适配器会成批送出字节） |
+| `link` | 仅 `port: pty`。指向 pty 对中被测设备那一端的符号链接路径（例如 `/tmp/ttyV0`） |
 
 ### 串口 RTU（`type: rtu`）
 
@@ -52,6 +53,21 @@ listeners:
 - 站号 1-247 按配置应答；0 为广播（写类功能码在该监听器的所有设备上执行，不应答）；248-255 忽略。
 - 串口上 `unknown_unit: exception` 无效（未知站号一律不应答）。
 - 串口无法打开时，该监听器在 `/api/state` 中为 `status: error`，其他监听器照常运行；重新加载配置时会重试。
+
+### 伪终端对（`port: pty`）
+
+在 Linux、macOS 和 WSL2 上，ModbusSim 可以自己创建虚拟串口对，不需要驱动，也不需要 root：
+
+```yaml
+listeners:
+  - {id: vcom, type: rtu, port: pty, link: /tmp/ttyV0}
+```
+
+- 串口对的一端由 ModbusSim 持有；被测设备把 `link`（或日志、UI、`/api/state` 中 `device` 显示的 `/dev/pts/N`）当作串口打开。
+- `link` 在启动时创建，退出时删除。路径已存在时，该监听器为 `status: error`，不动已有的文件。请放在有写权限的目录（`/dev` 需要 root）。
+- 被测设备可以随时关闭并重新打开串口。
+- 局限：pty 不传 RTS / CTS / DTR，波特率和校验位设置无效，也不按波特率送出字节，因此测不了 t1.5 / t3.5，请保持 `strict_timing: false`。
+- Windows 上不可用：配置校验会报错，并提示可选方案：签名的虚拟串口驱动、两个 USB-RS485 适配器互接，或 `rtu_over_tcp`。
 
 ### 功能码
 

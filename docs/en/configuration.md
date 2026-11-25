@@ -34,12 +34,13 @@ devices:
 |---|---|
 | `id` | Name used by `devices[].listeners` |
 | `type` | `tcp` (Modbus TCP, MBAP), `rtu_over_tcp` (RTU frames with CRC-16 over a TCP socket) or `rtu` (serial line) |
-| `host`, `port` | `tcp` / `rtu_over_tcp`: bind address and TCP port (default 5020; ports below 1024 need privileges). `rtu`: `port` is the serial device (`COM5`, `/dev/ttyUSB0`) or a pyserial URL (`socket://host:port`, `rfc2217://...`); `host` is ignored |
+| `host`, `port` | `tcp` / `rtu_over_tcp`: bind address and TCP port (default 5020; ports below 1024 need privileges). `rtu`: `port` is the serial device (`COM5`, `/dev/ttyUSB0`) or a pyserial URL (`socket://host:port`, `rfc2217://...`), or `pty` (see below); `host` is ignored |
 | `unit_id_mode` | `strict`: only configured unit IDs answer. `any`: every unit ID is routed to `default_unit` |
 | `unknown_unit` | In `strict` mode: `ignore` (no response, like a real bus) or `exception` (gateway exception) |
 | `default_unit` | Unit ID used by `any` mode and for TCP unit IDs 0 / 255 |
 | `baudrate`, `bytesize`, `parity`, `stopbits` | `rtu` only. Defaults 19200 (spec default), 8, `E`, 1. `parity`: `E` / `O` / `N`; with `N` the default is 2 stop bits (Serial Line V1.02). `N` + `stopbits: 1` is accepted as a common but non-conforming setting |
 | `strict_timing` | `rtu` only (default `false`). `true`: a gap longer than t1.5 inside a frame drops it and exactly t3.5 ends a frame. `false`: no t1.5 check and frames end after max(t3.5, 20 ms) of silence, because USB-serial adapters deliver bytes in bursts |
+| `link` | `port: pty` only. Path of a symlink to the device under test's end of the pty pair (e.g. `/tmp/ttyV0`) |
 
 ### Serial RTU (`type: rtu`)
 
@@ -52,6 +53,21 @@ listeners:
 - Unit IDs 1-247 answer as configured; 0 is broadcast (write function codes run on every device of the listener, never answered); 248-255 are ignored.
 - `unknown_unit: exception` has no effect on a serial line (unknown units never answer).
 - If the port cannot be opened, the listener reports `status: error` in `/api/state` and the other listeners keep running; a configuration reload retries.
+
+### Pseudo-terminal pair (`port: pty`)
+
+On Linux, macOS and WSL2 ModbusSim can create the virtual serial port pair itself, with no driver and no root:
+
+```yaml
+listeners:
+  - {id: vcom, type: rtu, port: pty, link: /tmp/ttyV0}
+```
+
+- ModbusSim keeps one end of the pair; the device under test opens `link` (or the `/dev/pts/N` path shown in the log, the UI and `/api/state` as `device`) as its serial port.
+- `link` is created at startup and removed on exit. If the path already exists, the listener reports `status: error` and the existing file is left alone. Put it in a directory you can write to (`/dev` needs root).
+- The device under test may close and reopen the port at any time.
+- Limits: a pty carries no RTS / CTS / DTR, ignores the baud rate and parity, and does not pace bytes, so t1.5 / t3.5 cannot be tested; keep `strict_timing: false`.
+- Not available on Windows: configuration validation fails and suggests a signed virtual serial port driver, a pair of USB-RS485 adapters, or `rtu_over_tcp`.
 
 ### Function codes
 

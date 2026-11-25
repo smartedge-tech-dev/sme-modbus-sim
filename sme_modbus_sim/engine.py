@@ -418,7 +418,7 @@ class Engine(BaseEngine):
                     str(port), lc.baudrate or 9600, lc.bytesize or 8, lc.parity or "E", lc.stopbits or 1,
                     resolver=units.get, unit_id_mode=lc.unit_id_mode, default_unit=lc.default_unit,
                     trace=self._on_trace, listener_id=lc.id, all_units=lambda u=units: list(u.values()),
-                    strict_timing=bool(lc.strict_timing))
+                    strict_timing=bool(lc.strict_timing), link=lc.link)
                 continue
             servers[lc.id] = ModbusTcpServer(
                 host, port, framer=lc.type, resolver=units.get, unit_id_mode=lc.unit_id_mode,
@@ -513,7 +513,10 @@ class Engine(BaseEngine):
             s = self.servers.get(lc.id)
             st = self.stats.get(lc.id, ListenerStats()).as_dict()
             host, port = self._listener_addr(lc)
+            if lc.type == "rtu" and s is not None:
+                port = s.display_port
             out[lc.id] = {"type": lc.type, "host": None if lc.type == "rtu" else host, "port": port,
+                          "device": getattr(s, "device", None) if lc.type == "rtu" else None,
                           "bound_port": s.bound_port if s else None,
                           "clients": s.client_count if s else 0,
                           "status": s.status if s else "stopped", "error": s.error if s else None, **st}
@@ -562,7 +565,7 @@ class Engine(BaseEngine):
         return {"version": __version__, "running": self.running, "time_scale": self.time_scale,
                 "tick_seconds": self.tick_seconds, "sim_time": self.sim_time, "sim_hour": self.sim_hour,
                 "listeners": [{"id": l.id, "type": l.type, **{k: v for k, v in stats[l.id].items()
-                                                              if k in ("host", "port", "bound_port", "clients", "status", "error")}}
+                                                              if k in ("host", "port", "device", "bound_port", "clients", "status", "error")}}
                               for l in self.config.listeners],
                 "devices": [d.info() for d in self.devices.values()],
                 "events": list(self.events), "stats": stats}

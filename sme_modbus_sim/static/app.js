@@ -188,13 +188,18 @@ function renderSim(sim) {
 
 function renderClock(h) { if (h != null) $("clock").textContent = hhmm(h); }
 
+// Serial listeners have no host: show the device (for a pty, the link the device under test opens).
+function lsnAddr(l) {
+  return l.type === "rtu" ? String(l.port ?? "") : `${l.host}:${l.bound_port ?? l.port}`;
+}
+
 function listenerRows() {
   const out = [];
   for (const l of S.snap?.listeners || []) {
     const st = S.stats[l.id] || {};
-    const port = st.bound_port ?? l.bound_port;
-    out.push({ id: l.id, type: l.type, host: st.host ?? l.host, port: port ?? st.port ?? l.port,
-      up: port != null, clients: st.clients ?? l.clients ?? 0 });
+    out.push({ id: l.id, type: l.type, addr: lsnAddr({ ...l, ...st }),
+      up: l.type === "rtu" ? (st.status ?? l.status) === "running" : (st.bound_port ?? l.bound_port) != null,
+      clients: st.clients ?? l.clients ?? 0 });
   }
   return out;
 }
@@ -202,10 +207,10 @@ function listenerRows() {
 function renderListeners() {
   const ls = listenerRows();
   $("lsnList").innerHTML = ls.map((l) => `<li class="${l.up ? "on" : "down"}">${esc(t(l.up ? "lsn.item" : "lsn.down",
-    { id: l.id, type: l.type, host: l.host, port: l.port, n: l.clients }))}</li>`).join("");
+    { id: l.id, type: l.type, addr: l.addr, n: l.clients }))}</li>`).join("");
   const sum = t("lsn.summary", { n: ls.length, c: ls.reduce((a, l) => a + (l.clients || 0), 0) });
   $("netinfo").textContent = sum;
-  $("netinfo").title = ls.map((l) => `${l.id} ${l.type} ${l.host}:${l.port}`).join("\n");
+  $("netinfo").title = ls.map((l) => `${l.id} ${l.type} ${l.addr}`).join("\n");
 }
 
 function devMatches(d, f) {
@@ -590,7 +595,7 @@ function renderStats() {
     const excRows = exc.length ? exc.map(([k, n]) => `<tr class="bad"><td>0x${k}</td><td>${esc(I18N.en[`exc.${k}`] ? t(`exc.${k}`) : "")}</td><td class="num">${n}</td></tr>`).join("")
       : `<tr><td colspan="3" class="muted">${esc(t("stats.none"))}</td></tr>`;
     return `<div class="statcard"><h4>${esc(id)}</h4>
-      <div class="meta">${esc(t("stats.meta", { type: s.type, host: s.host, port: s.bound_port ?? s.port, clients: s.clients ?? 0,
+      <div class="meta">${esc(t("stats.meta", { type: s.type, addr: lsnAddr(s), clients: s.clients ?? 0,
         conn: s.connections ?? 0, rx: s.rx ?? 0, tx: s.tx ?? 0, dropped: s.dropped ?? 0 }))}</div>
       <table><thead><tr><th colspan="2">${esc(t("stats.requests"))}</th><th class="num">${esc(t("stats.count"))}</th></tr></thead><tbody>${reqRows}</tbody></table>
       <table><thead><tr><th colspan="2">${esc(t("stats.exceptions"))}</th><th class="num">${esc(t("stats.count"))}</th></tr></thead><tbody>${excRows}</tbody></table>
