@@ -1,7 +1,7 @@
 """Command line entry point.
 
   sme-modbus-sim [run] [-c CONFIG] [--host 127.0.0.1] [--http-port 8081] [--no-browser]
-  sme-modbus-sim validate CONFIG          (exit 0 = valid, 2 = config error)
+  sme-modbus-sim validate [-c] CONFIG     (exit 0 = valid, 2 = config error)
   sme-modbus-sim templates [--templates-dir DIR]
   sme-modbus-sim scan   (--host H [--port 502] [--transport tcp|rtu_over_tcp] | --serial COM5 [--baudrate ...])
                         --unit 1 --range holding:0-99 [--range ...] [-o template.yaml] [-y]
@@ -258,7 +258,7 @@ def main(argv=None) -> int:
         rest = rest[1:]
     ap = argparse.ArgumentParser(prog=APP_NAME,
                                  description="Modbus TCP / RTU over TCP device simulator with a web UI "
-                                             "(subcommands: run, validate CONFIG, templates, scan, record); "
+                                             "(subcommands: run, validate [-c] CONFIG, templates, scan, record); "
                                              "default config: the bundled configs/demo-site.yaml")
     add_common_args(ap, default_http_port=DEFAULT_HTTP_PORT, app_name=APP_NAME, version=__version__)
     args = ap.parse_args(rest)

@@ -34,8 +34,8 @@ First release (0.1.0): a Modbus device simulator with a live web UI.
 **Web UI, API and CLI**
 - Web UI (English / Japanese / Simplified Chinese): point table with live values over WebSocket, write from the UI, per-point history and trend, Modbus traffic log (trace), statistics with push, fault injection, device management (add / edit / delete, enum editing) and a template browser; light and dark themes; usable on narrow windows.
 - REST API and WebSocket: `/api/state`, `/api/templates`, `/api/history`, point write, simulation control, config get / put / save, `/api/trace`, `/api/stats`, `/api/faults`, `/api/version`, `/ws`. Error responses carry a readable `error` message next to FastAPI's `detail`; adding or duplicating a device returns `{ok, name, device}`.
-- CLI: `sme-modbus-sim [run]` (web UI on port 8081 by default), `validate CONFIG` (exit 0 = valid, 2 = config error, message on stderr), `templates`, `scan`, `record`, `--version` (`sme-modbus-sim 0.1.0`).
+- CLI: `sme-modbus-sim [run]` (web UI on port 8081 by default), `validate [-c] CONFIG` (exit 0 = valid, 2 = config error, message on stderr; a function used as a value in an expression, e.g. `pv > 3`, is caught here instead of failing on every tick), `templates`, `scan`, `record`, `--version` (`sme-modbus-sim 0.1.0`).
 
 **Packaging**
-- Built on [sme-sim-common](https://pypi.org/project/sme-sim-common/) 1.x, the engine, web shell, behaviors, templates and Excel core shared with SME BACnetSim.
+- Built on [sme-sim-common](https://pypi.org/project/sme-sim-common/) 1.1+, the engine, web shell, behaviors, templates and Excel core shared with SME BACnetSim.
 - Windows one-file exe, multi-arch Docker image (amd64 / arm64 / arm/v7) with offline image archives, CI on Linux / Windows / macOS (Python 3.11 - 3.13), documentation site.

@@ -55,7 +55,7 @@ python -m venv .venv
 | `--host 0.0.0.0` | Web UI 绑定地址（默认仅本机） |
 | `--http-port 8081` | Web UI 端口 |
 | `--no-browser` | 不自动打开浏览器 |
-| `validate CONFIG` | 校验配置文件后退出 |
+| `validate [-c] CONFIG` | 校验配置文件（含行为表达式）后退出（0 = 有效，2 = 错误） |
 | `templates` | 列出设备模板 |
 
 ## 连接 Modbus 主站

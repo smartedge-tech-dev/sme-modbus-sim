@@ -81,7 +81,7 @@ Open http://127.0.0.1:8081/ . Python 3.11 or newer.
 | `--host 0.0.0.0` | Web UI bind address (default localhost only) |
 | `--http-port 8081` | Web UI port |
 | `--no-browser` | Do not open the browser |
-| `validate CONFIG` | Check a config file and exit |
+| `validate [-c] CONFIG` | Check a config file, including behavior expressions, and exit (0 = valid, 2 = error) |
 | `templates` | List the device templates |
 
 The demo config has four devices: a battery PCS (unit 1), a BMS (unit 2), a grid meter (unit 3) on Modbus TCP

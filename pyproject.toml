@@ -26,7 +26,7 @@ dependencies = [
   "openpyxl>=3.1",
   "pydantic>=2",
   "pyserial>=3.5",
-  "sme-sim-common[xlsx]>=1.0,<2",
+  "sme-sim-common[xlsx]>=1.1,<2",
 ]
 
 [project.optional-dependencies]

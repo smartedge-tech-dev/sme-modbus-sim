@@ -70,7 +70,7 @@ python -m venv .venv
 | `--host 0.0.0.0` | Web UI 绑定地址（默认仅本机） |
 | `--http-port 8081` | Web UI 端口 |
 | `--no-browser` | 不自动打开浏览器 |
-| `validate CONFIG` | 校验配置文件后退出 |
+| `validate [-c] CONFIG` | 校验配置文件（含行为表达式）后退出（0 = 有效，2 = 错误） |
 | `templates` | 列出设备模板 |
 
 演示配置包含 4 台设备：Modbus TCP 端口 **5020** 上的储能 PCS（站号 1）、BMS（站号 2）、并网点电能表（站号 3），以及仅能通过 RTU over TCP 监听器（端口 **5021**）访问的机房传感器（站号 4）。
