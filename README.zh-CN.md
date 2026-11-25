@@ -95,7 +95,7 @@ client.close()
 
 ## 路线图
 
-以下均已包含在 0.1.0（尚未发布）中：Modbus TCP、RTU over TCP、串口 RTU；功能码
+已在 0.1.0 中发布：Modbus TCP、RTU over TCP、串口 RTU；功能码
 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E；故障注入（UI、REST、预设）；Excel 点表导入导出；
 用户本地模板与“将设备另存为模板”；通用模板以及 SunSpec 光伏逆变器 / 电能表 / DER（701-705）/ 电池（802、803）模板；真实设备的只读扫描 / 录制；带设备管理和模板浏览器的 Web UI；
 Windows exe、多架构 Docker、离线包。

@@ -107,7 +107,7 @@ client.close()
 
 ## Roadmap
 
-Everything below is in 0.1.0 (not yet released): Modbus TCP, RTU over TCP and serial RTU; function codes
+Released in 0.1.0: Modbus TCP, RTU over TCP and serial RTU; function codes
 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E; fault injection (UI, REST, presets); Excel point-list
 import / export; user-local templates and "save device as template"; generic templates and SunSpec PV inverter /
 meter / DER (701-705) / battery (802, 803) templates; read-only scan / record of real devices; web UI with device management and a template browser; Windows exe, multi-arch Docker, offline archives.

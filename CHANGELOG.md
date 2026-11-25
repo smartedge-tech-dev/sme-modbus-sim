@@ -6,9 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-25
+
 ### Added
 
-First release (0.1.0): a Modbus device simulator with a live web UI.
+First release: a Modbus device simulator with a live web UI.
 
 **Protocol**
 - Own asyncio protocol core with MBAP and RTU framers; function codes 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 (mask write register) / 17 (read/write multiple registers) / 2B-0E (Read Device Identification, served from `identification`), with standard exception responses.
