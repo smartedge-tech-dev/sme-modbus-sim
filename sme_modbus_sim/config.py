@@ -42,27 +42,74 @@ class SimulationConfig(_Model):
 
 
 class ListenerConfig(_Model):
-    """A Modbus server endpoint. One listener serves many unit ids (design §12 Q4)."""
+    """A Modbus server endpoint. One listener serves many unit ids (design §12 Q4).
+
+    ``tcp`` / ``rtu_over_tcp``: ``host`` + TCP ``port`` (int).
+    ``rtu`` (serial line): ``port`` is a device name or pyserial URL (``COM5``, ``/dev/ttyUSB0``,
+    ``socket://host:port``, ``rfc2217://...``); ``baudrate`` / ``bytesize`` / ``parity`` / ``stopbits`` /
+    ``strict_timing`` apply only to it. Defaults follow Modbus over Serial Line V1.02: 8 data bits,
+    even parity, and 2 stop bits when parity is ``N`` (``N`` + 1 stop bit is accepted as a widespread
+    but non-conforming setting).
+    """
 
     id: str = Field(min_length=1)
-    type: Literal["tcp", "rtu_over_tcp"] = "tcp"
+    type: Literal["tcp", "rtu_over_tcp", "rtu"] = "tcp"
     host: str = "0.0.0.0"
-    port: int = Field(default=5020, ge=1, le=65535)
+    port: Union[int, str] = 5020
     unit_id_mode: Literal["strict", "any"] = "strict"
     unknown_unit: Literal["ignore", "exception"] = "ignore"
     default_unit: Optional[int] = Field(default=None, ge=1, le=247)
+    baudrate: Optional[int] = Field(default=None, ge=300, le=4_000_000)
+    bytesize: Optional[Literal[8]] = None
+    parity: Optional[Literal["E", "N", "O"]] = None
+    stopbits: Optional[Literal[1, 2]] = None
+    strict_timing: Optional[bool] = None
 
-    @model_validator(mode="before")
+    @field_validator("port")
     @classmethod
-    def _reserved_types(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("type") == "rtu":
-            raise ValueError(f"listener {data.get('id', '?')!r}: type 'rtu' (serial) is not supported in 0.1.0 "
-                             "(planned for 0.2.0; use rtu_over_tcp with a serial gateway / virtual COM)")
-        return data
+    def _port(cls, v: Any, info: Any) -> Any:
+        kind = info.data.get("type", "tcp")
+        if isinstance(v, str) and v.strip().isdigit() and kind != "rtu":
+            v = int(v)
+        if kind == "rtu":
+            if isinstance(v, bool) or not str(v).strip():
+                raise ValueError("type rtu needs a serial device (e.g. COM5, /dev/ttyUSB0) or a pyserial URL")
+            return str(v).strip()
+        if isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 65535:
+            raise ValueError(f"port must be a TCP port 1..65535 for type {kind}")
+        return v
+
+    @model_validator(mode="after")
+    def _check(self) -> "ListenerConfig":
+        serial_fields = ("baudrate", "bytesize", "parity", "stopbits", "strict_timing")
+        if self.type == "rtu":
+            if "port" not in self.model_fields_set:
+                raise ValueError(f"listener {self.id!r}: type rtu needs port: a serial device "
+                                 "(e.g. COM5, /dev/ttyUSB0) or a pyserial URL")
+            if self.baudrate is None:
+                self.baudrate = 19200  # Serial Line V1.02: 19200 is the default
+            if self.bytesize is None:
+                self.bytesize = 8
+            if self.parity is None:
+                self.parity = "E"
+            if self.stopbits is None:
+                self.stopbits = 2 if self.parity == "N" else 1
+            if self.strict_timing is None:
+                self.strict_timing = False
+            return self
+        used = [f for f in serial_fields if getattr(self, f) is not None]
+        if used:
+            raise ValueError(f"listener {self.id!r}: {', '.join(used)} only apply to type rtu (serial)")
+        return self
 
 
 class IdentificationConfig(_Model):
-    """Device identification objects (FC 43 / 14). Stored only in 0.1.0; served from 0.2.0."""
+    """Device identification objects served by FC 2B / MEI 0E (Read Device Identification).
+
+    Object ids: 00 vendor_name, 01 product_code, 02 revision (basic, mandatory; defaults
+    "SmartEdge" / "SME-MODBUS-SIM" / package version), 03 vendor_url, 04 product_name,
+    05 model_name, 06 user_application_name (regular, optional).
+    """
 
     vendor_name: Optional[str] = None
     product_code: Optional[str] = None
@@ -70,6 +117,7 @@ class IdentificationConfig(_Model):
     vendor_url: Optional[str] = None
     product_name: Optional[str] = None
     model_name: Optional[str] = None
+    user_application_name: Optional[str] = None
 
 
 class PointConfig(_Model):
@@ -240,10 +288,14 @@ class SimConfig(_Model):
         dup = sorted({i for i in ids if ids.count(i) > 1})
         if dup:
             raise ValueError(f"duplicate listener id: {dup}")
-        eps = [(l.host, l.port) for l in self.listeners]
+        eps = [(l.host, l.port) for l in self.listeners if l.type != "rtu"]
         dup_ep = sorted({f"{h}:{p}" for h, p in eps if eps.count((h, p)) > 1})
         if dup_ep:
             raise ValueError(f"listeners share the same host:port: {dup_ep}")
+        ports = [str(l.port) for l in self.listeners if l.type == "rtu"]
+        dup_port = sorted({p for p in ports if ports.count(p) > 1})
+        if dup_port:
+            raise ValueError(f"serial listeners share the same port: {dup_port}")
         names = [d.name for d in self.devices]
         dup = sorted({n for n in names if names.count(n) > 1})
         if dup:

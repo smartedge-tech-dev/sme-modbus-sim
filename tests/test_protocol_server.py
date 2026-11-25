@@ -137,7 +137,7 @@ def test_rtu_over_tcp_raw_socket():
             # unknown unit -> no response
             assert await _raw_exchange(port, RtuFramer.build(9, bytes.fromhex("0300000001"))) == b""
             # unknown FC -> flushed on idle -> exception 01
-            resp = await _raw_exchange(port, RtuFramer.build(1, bytes.fromhex("2B0E0100")))
+            resp = await _raw_exchange(port, RtuFramer.build(1, bytes.fromhex("2B0D0100")))
             assert resp == RtuFramer.build(1, bytes([0xAB, 0x01]))
             # broadcast write -> executed on all units, no response
             await _raw_exchange(port, RtuFramer.build(0, bytes.fromhex("0600070055")), read=False)

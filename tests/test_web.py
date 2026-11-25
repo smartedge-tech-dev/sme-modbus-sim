@@ -107,3 +107,95 @@ def test_cli_validate_and_templates(tmp_path, capsys):
     with pytest.raises(SystemExit) as ei:
         main(["--version"])
     assert ei.value.code == 0
+
+
+# ---------------------------------------------------------------- Excel / user templates
+
+import io  # noqa: E402
+
+from openpyxl import load_workbook  # noqa: E402
+
+from sme_modbus_sim import templates as tpl  # noqa: E402
+from sme_modbus_sim.web import XLSX_TYPE  # noqa: E402
+from sme_modbus_sim.xlsx import SHEETS  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def tpl_dir(tmp_path, monkeypatch):
+    d = tmp_path / "user-templates"
+    monkeypatch.setenv(tpl.ENV_TEMPLATES_DIR, str(d))
+    monkeypatch.setattr(tpl, "_user_dir", None)
+    yield d
+    tpl.clear_user_templates()
+
+
+def _set(wb, sheet, key_col, key, col, value):
+    cols = list(SHEETS[sheet])
+    for row in wb[sheet].iter_rows(min_row=3):
+        if row[cols.index(key_col)].value == key:
+            row[cols.index(col)].value = value
+            return
+    raise AssertionError(key)
+
+
+def _bytes(wb):
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_xlsx_routes(client):
+    r = client.get("/api/config/xlsx")
+    assert r.status_code == 200 and r.headers["content-type"].startswith(XLSX_TYPE)
+    assert "attachment" in r.headers["content-disposition"]
+    blank = client.get("/api/config/xlsx-template")
+    assert blank.status_code == 200 and load_workbook(io.BytesIO(blank.content)).sheetnames[0] == "Listeners"
+    wb = load_workbook(io.BytesIO(r.content))
+    _set(wb, "Points", "name", "ro", "value", 9)
+    r2 = client.post("/api/config/import", files={"file": ("p.xlsx", _bytes(wb), XLSX_TYPE)})
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["devices"] == 1
+    cfg = parse_text(client.get("/api/config").text)
+    assert {p.name: p.value for p in cfg.devices[0].points}["ro"] == 9
+    assert cfg.simulation.tick_seconds == 0.1  # simulation section kept from the running config
+    assert client.engine.devices["D"].store.get("input", 0) == [9]
+
+    _set(wb, "Devices", "name", "D", "unit_id", "x")
+    bad = client.post("/api/config/import", files={"file": ("p.xlsx", _bytes(wb), XLSX_TYPE)})
+    assert bad.status_code == 400
+    detail = bad.json()["detail"]
+    assert "1 error" in detail["message"] and detail["errors"][0].startswith("Devices row 3, column 'unit_id'")
+    junk = client.post("/api/config/import", files={"file": ("p.xlsx", b"junk", XLSX_TYPE)})
+    assert junk.status_code == 400 and "not a readable" in junk.json()["detail"]["errors"][0]
+
+
+def test_template_routes(client, tpl_dir):
+    r = client.post("/api/templates/from-device/D", json={"name": "dev_d"})
+    assert r.status_code == 200, r.text
+    assert Path(r.json()["path"]) == tpl_dir / "dev_d.yaml"
+    assert client.post("/api/templates/from-device/D", json={"name": "dev_d"}).status_code == 409
+    assert client.post("/api/templates/from-device/D", json={"name": "dev_d", "overwrite": True}).status_code == 200
+    assert client.post("/api/templates/from-device/nope", json={"name": "x"}).status_code == 404
+    assert client.post("/api/templates/from-device/D", json={"name": "bad name"}).status_code == 400
+    cat = {t["name"]: t for t in client.get("/api/templates").json()}
+    assert cat["dev_d"]["source"] == "user" and cat["battery_pcs"]["source"] == "builtin"
+    (tpl_dir / "broken.yaml").write_text("points: [", encoding="utf-8")
+    r = client.post("/api/templates/reload").json()
+    assert r["loaded"] == ["dev_d"] and len(r["errors"]) == 1 and r["dir"] == str(tpl_dir)
+    new = CONFIG + "  - {name: E, unit_id: 2, template: dev_d}\n"
+    assert client.put("/api/config", content=new).status_code == 200
+    names = [p["name"] for p in client.get("/api/state").json()["devices"][1]["points"]]
+    assert names == ["sp", "ro", "t"]
+
+
+def test_cli_templates_dir(tmp_path, capsys):
+    d = tmp_path / "tpls"
+    d.mkdir()
+    (d / "mine.yaml").write_text("title: Mine\npoints: [{name: a, table: holding}]\n", encoding="utf-8")
+    (d / "bad.yaml").write_text("points: [", encoding="utf-8")
+    assert main(["templates", "--templates-dir", str(d)]) == 0
+    out, err = capsys.readouterr()
+    assert "mine" in out and "[user:" in out and "bad.yaml" in err
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("devices: [{name: X, unit_id: 1, template: mine}]", encoding="utf-8")
+    assert main(["validate", str(cfg), "--templates-dir", str(d)]) == 0

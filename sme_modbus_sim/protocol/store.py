@@ -44,6 +44,8 @@ class UnitStore:
         self._writable: dict[str, set[int]] = {t: set() for t in TABLES}
         self._on_write: list[WriteCallback] = []
         self._validators: list[WriteValidator] = []
+        # FC2B/0E Read Device Identification objects: object id -> value (str or bytes).
+        self.identification: dict[int, str | bytes] = {}
 
     # ------------------------------------------------------------------ setup
     @staticmethod

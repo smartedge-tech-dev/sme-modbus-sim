@@ -33,11 +33,29 @@ devices:
 | 键 | 含义 |
 |---|---|
 | `id` | 供 `devices[].listeners` 引用的名称 |
-| `type` | `tcp`（Modbus TCP，MBAP）或 `rtu_over_tcp`（TCP 套接字上带 CRC-16 的 RTU 帧） |
-| `host`, `port` | 绑定地址与端口（默认 5020；1024 以下需要权限） |
+| `type` | `tcp`（Modbus TCP，MBAP）、`rtu_over_tcp`（TCP 套接字上带 CRC-16 的 RTU 帧）或 `rtu`（串口） |
+| `host`, `port` | `tcp` / `rtu_over_tcp`：绑定地址与 TCP 端口（默认 5020；1024 以下需要权限）。`rtu`：`port` 为串口设备（`COM5`、`/dev/ttyUSB0`）或 pyserial URL（`socket://host:port`、`rfc2217://...`），`host` 被忽略 |
 | `unit_id_mode` | `strict`：只响应已配置的站号。`any`：所有站号都路由到 `default_unit` |
 | `unknown_unit` | `strict` 模式下：`ignore`（与真实总线一样不响应）或 `exception`（网关异常） |
 | `default_unit` | `any` 模式以及 TCP 站号 0 / 255 使用的站号 |
+| `baudrate`, `bytesize`, `parity`, `stopbits` | 仅 `rtu`。默认 19200（规格默认值）、8、`E`、1。`parity`：`E` / `O` / `N`；`N` 时默认 2 位停止位（Serial Line V1.02）。`N` + `stopbits: 1` 作为常见但不符合规格的设置也可接受 |
+| `strict_timing` | 仅 `rtu`（默认 `false`）。`true`：帧内字符间隔超过 t1.5 即丢弃该帧，静默恰好 t3.5 即帧结束。`false`：不检查 t1.5，静默 max(t3.5, 20 ms) 视为帧结束（USB 转串口适配器会成批送出字节） |
+
+### 串口 RTU（`type: rtu`）
+
+```yaml
+listeners:
+  - {id: com1, type: rtu, port: COM5, baudrate: 19200, parity: E}
+```
+
+- 帧结束 = t3.5 静默（3.5 个 11 位字符时间；19200 baud 以上固定 1.75 ms）；长度可推定的请求无需等待静默即应答。
+- 站号 1-247 按配置应答；0 为广播（写类功能码在该监听器的所有设备上执行，不应答）；248-255 忽略。
+- 串口上 `unknown_unit: exception` 无效（未知站号一律不应答）。
+- 串口无法打开时，该监听器在 `/api/state` 中为 `status: error`，其他监听器照常运行；重新加载配置时会重试。
+
+### 功能码
+
+01、02、03、04、05、06、0F、10、16（Mask Write Register）、17（Read/Write Multiple registers，先写后读）以及 2B / 0E（Read Device Identification：读取码 01 basic、02 regular、03 extended 流式读取，04 单个对象；过长的应答用 More Follows 分段）。经 16 / 17 的写入与 06 / 10 适用相同检查（只读点、多寄存器值部分写入、min / max）。其他功能码返回异常 01。
 
 ## devices
 
@@ -49,7 +67,7 @@ devices:
 | `template`, `params` | 由模板生成点表，见[行为与模板](behaviors-templates.md) |
 | `byte_order`, `word_order` | 设备默认值：`big` 或 `little` |
 | `undefined_address` | 读取未定义地址时：`exception`（非法数据地址，默认）或 `zero` |
-| `identification` | `vendor_name`、`product_code`、`revision`、`vendor_url`、`product_name`、`model_name` |
+| `identification` | `vendor_name`、`product_code`、`revision`、`vendor_url`、`product_name`、`model_name`, `user_application_name` （由 FC 2B / 0E 应答；默认 `SmartEdge`、`SME-MODBUS-SIM`、程序版本） |
 | `points` | 本设备的点；与模板点同名的条目会覆盖模板定义 |
 | `removed` | 用户删除的模板点 |
 

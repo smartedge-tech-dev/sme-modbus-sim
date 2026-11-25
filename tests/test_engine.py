@@ -148,3 +148,40 @@ def test_snapshot_history_and_running():
 def test_bad_behavior_rejected_at_build():
     with pytest.raises(ValueError, match="D/x"):
         _engine([{"name": "x", "table": "input", "address": 0, "behavior": {"type": "expr", "expr": "import os"}}])
+
+
+def test_identification_defaults_and_overrides():
+    from sme_modbus_sim import __version__
+    e = _engine([{"name": "a", "table": "holding", "address": 0}])
+    assert e.devices["D"].store.identification == {0: "SmartEdge", 1: "SME-MODBUS-SIM", 2: __version__}
+    e = _engine([{"name": "a", "table": "holding", "address": 0}],
+                identification={"vendor_name": "ACME", "model_name": "X1", "user_application_name": "site"})
+    ident = e.devices["D"].store.identification
+    assert (ident[0], ident[1], ident[5], ident[6]) == ("ACME", "SME-MODBUS-SIM", "X1", "site")
+
+
+def test_fc16_fc17_go_through_engine_validators():
+    import struct
+
+    from sme_modbus_sim.protocol.pdu import handle_pdu
+    e = _engine([{"name": "sp", "table": "holding", "address": 0, "value": 5, "min": 0, "max": 100},
+                 {"name": "ro", "table": "holding", "address": 1, "access": "r", "value": 1},
+                 {"name": "big", "table": "holding", "address": 2, "datatype": "uint32", "value": 7}])
+    store = e.devices["D"].store
+
+    def mask(addr, and_m, or_m):
+        return handle_pdu(store, bytes([0x16]) + struct.pack(">HHH", addr, and_m, or_m))
+
+    def rw(waddr, values):
+        return handle_pdu(store, bytes([0x17]) + struct.pack(">HHHHB", 0, 4, waddr, len(values), 2 * len(values))
+                          + struct.pack(f">{len(values)}H", *values))
+
+    assert mask(0, 0x0000, 0x00FF) == bytes([0x96, 0x03])        # 255 > max
+    assert mask(1, 0x0000, 0x0002) == bytes([0x96, 0x02])        # read-only point
+    assert mask(2, 0xFFFF, 0x0000) == bytes([0x96, 0x02])        # partial write of uint32
+    assert mask(0, 0x00F0, 0x0003)[0] == 0x16 and e.devices["D"].by_name["sp"].value == 3
+    assert rw(3, [1]) == bytes([0x97, 0x02])                     # partial uint32
+    assert rw(1, [9]) == bytes([0x97, 0x02])                     # read-only
+    assert rw(0, [101]) == bytes([0x97, 0x03])                   # > max
+    assert rw(2, [0, 9]) == bytes([0x17, 8, 0, 3, 0, 1, 0, 0, 0, 9])
+    assert e.devices["D"].by_name["big"].value == 9

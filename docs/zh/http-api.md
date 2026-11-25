@@ -21,3 +21,14 @@ Web UI 使用的就是这套 API，你也可以用脚本调用。所有路由都
 curl -X POST http://127.0.0.1:8080/api/devices/PCS-1/points/p_setpoint/write \
      -H "Content-Type: application/json" -d '{"value": 20}'
 ```
+
+
+## Excel 与用户模板
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/config/xlsx` | 以 `.xlsx` 获取运行中的配置 |
+| `GET` | `/api/config/xlsx-template` | 空白工作簿 |
+| `POST` | `/api/config/import` | 导入工作簿（multipart `file`）；出错时返回 `400` 与错误列表 |
+| `POST` | `/api/templates/reload` | 重新加载用户模板目录；返回 `loaded` 与按文件的 `errors` |
+| `POST` | `/api/templates/from-device/{device}` | 将设备展开后的点另存为用户模板（`{"name", "overwrite"}`）；已存在时返回 `409` |

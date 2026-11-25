@@ -21,3 +21,14 @@ The web UI uses this API; you can script against it too. All routes are served o
 curl -X POST http://127.0.0.1:8080/api/devices/PCS-1/points/p_setpoint/write \
      -H "Content-Type: application/json" -d '{"value": 20}'
 ```
+
+
+## Excel and user templates
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/config/xlsx` | Running configuration as `.xlsx` |
+| `GET` | `/api/config/xlsx-template` | Blank workbook |
+| `POST` | `/api/config/import` | Import a workbook (multipart `file`); `400` with an error list |
+| `POST` | `/api/templates/reload` | Reload the user template directory; returns `loaded` and per-file `errors` |
+| `POST` | `/api/templates/from-device/{device}` | Save a device's expanded points as a user template (`{"name", "overwrite"}`); `409` if it exists |

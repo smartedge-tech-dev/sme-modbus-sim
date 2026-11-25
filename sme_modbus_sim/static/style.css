@@ -157,3 +157,8 @@ table.traffic { width: 100%; border-collapse: collapse; font-family: var(--mono)
   .st-run { padding: 4px 6px; }
   .st-run-lbl { display: none; }
 }
+
+/* Excel import errors / user templates */
+.errlist { max-height: 50vh; overflow: auto; margin: 0 0 8px; padding-left: 20px; }
+.errlist li { margin: 2px 0; }
+.devheader .tplsave { align-self: flex-start; }

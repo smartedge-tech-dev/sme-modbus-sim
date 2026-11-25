@@ -33,3 +33,29 @@
 
 参数可用 `sme-modbus-sim templates` 查看。模板为通用的原创定义，不内置任何厂商的寄存器表。由公开的 SunSpec
 模型定义生成的模板计划在 0.2.0 提供（与 SunSpec Alliance 无任何关联，未获其认可或认证）。
+
+
+## User-local templates
+
+自己的模板保存在安装目录之外、存放 YAML 文件的目录中：命令行 `--templates-dir DIR`，否则 `$SME_MODBUS_SIM_TEMPLATES`，
+否则 `~/.sme-modbus-sim/templates/`。启动时（先于配置加载，因此设备可以使用）以及通过 **模板 › 重新加载用户模板**
+（`POST /api/templates/reload`）加载。与内置模板同名的用户模板会替换内置模板。有错误的文件会被跳过并报告，不会使模拟器停止。
+
+```yaml
+# ~/.sme-modbus-sim/templates/my_inverter.yaml
+name: my_inverter          # 默认：文件名
+title: My PV inverter
+description: Register map of our inverter
+params: {rated_kw: 10}     # 默认值；设备用 params: 覆盖
+points:                    # 与设备的 points: 相同的 schema
+  - {name: p_limit, table: holding, address: 0, datatype: uint16, scale: 0.1, max: "{rated_kw}"}
+  - {name: p_actual, table: input, address: 0, datatype: int16, scale: 0.1,
+     behavior: {type: expr, expr: "min(p_limit, {rated_kw} * 0.8)"}}
+```
+
+参数只在**字符串**值中按 Python `str.format` 规则替换（`{rated_kw}` → 参数值）。恰好只有一个占位符的字符串
+（`"{rated_kw}"`）会连同类型取得参数值，因此也可用于数值字段。字面量花括号写作 `{{` / `}}`。
+
+设备标题栏中的 **另存为模板**（`POST /api/templates/from-device/{device}`，请求体 `{"name": ..., "overwrite": false}`）
+会把设备展开后的点作为模板文件写入该目录，例如在用 [Excel](excel.md) 导入厂商寄存器表之后。`GET /api/templates`
+为每个模板标注 `source`（`builtin` / `user`），用户模板还会给出文件 `path`。

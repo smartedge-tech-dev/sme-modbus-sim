@@ -101,6 +101,16 @@ class ModbusTcpServer:
     def client_count(self) -> int:
         return len(self._writers)
 
+    @property
+    def endpoint(self) -> str:
+        return f"{self.host}:{self.bound_port}"
+
+    @property
+    def status(self) -> str:
+        return "running" if self._server is not None else "stopped"
+
+    error: str | None = None  # bind errors are raised by start(); kept for parity with the serial server
+
     async def start(self) -> None:
         self._server = await asyncio.start_server(self._on_client, self.host, self.port)
 

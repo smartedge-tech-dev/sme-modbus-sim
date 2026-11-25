@@ -6,6 +6,7 @@ from .datatypes import decode, encode, get_bit, register_count, set_bit
 from .errors import ModbusError
 from .framer import DroppedFrame, Frame, MbapFramer, RtuFramer, crc16, crc_bytes
 from .pdu import handle_pdu
+from .serial_server import ModbusSerialServer
 from .server import ModbusTcpServer, TraceEvent
 from .store import UnitStore
 
@@ -16,6 +17,7 @@ __all__ = [
     "FunctionCode",
     "MbapFramer",
     "ModbusError",
+    "ModbusSerialServer",
     "ModbusTcpServer",
     "RtuFramer",
     "TraceEvent",

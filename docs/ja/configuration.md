@@ -33,11 +33,29 @@ devices:
 | キー | 内容 |
 |---|---|
 | `id` | `devices[].listeners` から参照する名前 |
-| `type` | `tcp`（Modbus TCP、MBAP）または `rtu_over_tcp`（TCP ソケット上の CRC-16 付き RTU フレーム） |
-| `host`, `port` | バインドアドレスとポート（既定 5020。1024 未満は権限が必要） |
+| `type` | `tcp`（Modbus TCP、MBAP）、`rtu_over_tcp`（TCP ソケット上の CRC-16 付き RTU フレーム）または `rtu`（シリアル回線） |
+| `host`, `port` | `tcp` / `rtu_over_tcp`: バインドアドレスと TCP ポート（既定 5020。1024 未満は権限が必要）。`rtu`: `port` はシリアルデバイス（`COM5`、`/dev/ttyUSB0`）または pyserial URL（`socket://host:port`、`rfc2217://...`）。`host` は無視 |
 | `unit_id_mode` | `strict`: 設定済みのユニット ID のみ応答。`any`: すべてのユニット ID を `default_unit` に振り向ける |
 | `unknown_unit` | `strict` 時の動作。`ignore`（実際のバスと同様に無応答）または `exception`（ゲートウェイ例外） |
 | `default_unit` | `any` モード、および TCP のユニット ID 0 / 255 で使うユニット ID |
+| `baudrate`, `bytesize`, `parity`, `stopbits` | `rtu` のみ。既定 19200（規格の既定値）、8、`E`、1。`parity`: `E` / `O` / `N`。`N` の場合の既定ストップビットは 2（Serial Line V1.02）。`N` + `stopbits: 1` は一般的だが規格外の設定として受け付ける |
+| `strict_timing` | `rtu` のみ（既定 `false`）。`true`: フレーム内で t1.5 を超える間隔があれば破棄し、t3.5 ちょうどでフレーム終端とする。`false`: t1.5 を検査せず、max(t3.5, 20 ms) の無信号でフレーム終端（USB シリアル変換器はバイトをまとめて渡すため） |
+
+### シリアル RTU（`type: rtu`）
+
+```yaml
+listeners:
+  - {id: com1, type: rtu, port: COM5, baudrate: 19200, parity: E}
+```
+
+- フレーム終端 = t3.5 の無信号（11 ビット文字の 3.5 文字時間。19200 baud 超は固定 1.75 ms）。長さが分かる要求は無信号を待たずに応答する。
+- ユニット ID 1〜247 は設定どおり応答。0 はブロードキャスト（書き込み系ファンクションコードをリスナー上の全デバイスで実行し、応答しない）。248〜255 は無視。
+- シリアル回線では `unknown_unit: exception` は効かない（未知のユニットは常に無応答）。
+- ポートを開けない場合、そのリスナーは `/api/state` で `status: error` となり、他のリスナーは動作を続ける。設定の再読み込みで再試行する。
+
+### ファンクションコード
+
+01、02、03、04、05、06、0F、10、16（Mask Write Register）、17（Read/Write Multiple registers、書き込み後に読み出し）、2B / 0E（Read Device Identification: 読み出しコード 01 basic、02 regular、03 extended のストリーム、04 個別。長い応答は More Follows で分割）。16 / 17 による書き込みにも 06 / 10 と同じ検査（読み取り専用ポイント、複数レジスタ値の部分書き込み、min / max）を適用する。その他のファンクションコードは例外 01 を返す。
 
 ## devices
 
@@ -49,7 +67,7 @@ devices:
 | `template`, `params` | テンプレートからポイントを生成します。[挙動とテンプレート](behaviors-templates.md) を参照 |
 | `byte_order`, `word_order` | デバイスの既定値（`big` または `little`） |
 | `undefined_address` | 未定義アドレスの読み出し時の動作。`exception`（不正データアドレス、既定）または `zero` |
-| `identification` | `vendor_name`、`product_code`、`revision`、`vendor_url`、`product_name`、`model_name` |
+| `identification` | `vendor_name`、`product_code`、`revision`、`vendor_url`、`product_name`、`model_name`, `user_application_name` （FC 2B / 0E で応答。既定値 `SmartEdge`、`SME-MODBUS-SIM`、プログラムのバージョン） |
 | `points` | このデバイスのポイント。テンプレートのポイントと同名のエントリーは上書きになります |
 | `removed` | ユーザーが削除したテンプレートのポイント |
 

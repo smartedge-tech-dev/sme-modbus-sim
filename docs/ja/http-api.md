@@ -21,3 +21,14 @@ Web UI はこの API を利用しており、スクリプトからも呼び出�
 curl -X POST http://127.0.0.1:8080/api/devices/PCS-1/points/p_setpoint/write \
      -H "Content-Type: application/json" -d '{"value": 20}'
 ```
+
+
+## Excel とユーザーテンプレート
+
+| メソッド | パス | 説明 |
+|---|---|---|
+| `GET` | `/api/config/xlsx` | 実行中の設定を `.xlsx` で取得 |
+| `GET` | `/api/config/xlsx-template` | 空のブック |
+| `POST` | `/api/config/import` | ブックをインポート（マルチパート `file`）。エラー時 `400` とエラー一覧 |
+| `POST` | `/api/templates/reload` | ユーザーテンプレートディレクトリを再読込。`loaded` とファイルごとの `errors` を返す |
+| `POST` | `/api/templates/from-device/{device}` | デバイスの展開済みポイントをユーザーテンプレートとして保存（`{"name", "overwrite"}`）。既存なら `409` |

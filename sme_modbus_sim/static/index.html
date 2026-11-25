@@ -103,6 +103,18 @@
   </form>
 </dialog>
 
+<dialog id="dlgErrors" class="dialog sh-dialog">
+  <form method="dialog" class="dlgform">
+    <h3 id="errTitle"></h3>
+    <p class="hint" id="errHint"></p>
+    <ul class="errlist err" id="errList"></ul>
+    <div class="dlgbtns">
+      <button class="btn primary" value="close" data-i18n="errdlg.close">Close</button>
+    </div>
+  </form>
+</dialog>
+<input type="file" id="xlsxFile" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+
 <script src="/static/i18n/ja.js"></script>
 <script src="/static/i18n/zh.js"></script>
 <script src="/static/app.js"></script>

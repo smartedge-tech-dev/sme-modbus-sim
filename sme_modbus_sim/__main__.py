@@ -2,7 +2,9 @@
 
   sme-modbus-sim [run] [-c CONFIG] [--host 127.0.0.1] [--http-port 8080] [--no-browser]
   sme-modbus-sim validate CONFIG
-  sme-modbus-sim templates
+  sme-modbus-sim templates [--templates-dir DIR]
+
+User-local templates are read from --templates-dir, $SME_MODBUS_SIM_TEMPLATES or ~/.sme-modbus-sim/templates.
   sme-modbus-sim --version
 
 Default-config resolution follows sme-bac-sim ``sme_bacnet_sim/__main__.py`` @ ebd27ec.
@@ -22,12 +24,26 @@ from . import __version__
 DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "configs" / "demo-site.yaml"
 
 
+def _load_templates(directory) -> None:
+    from .templates import load_user_templates
+
+    for e in load_user_templates(directory):
+        print(f"user template {e['path']}: skipped: {e['error']}", file=sys.stderr)
+
+
+def _tdir_arg(ap: argparse.ArgumentParser) -> None:
+    ap.add_argument("--templates-dir", help="user template directory "
+                                            "(default: $SME_MODBUS_SIM_TEMPLATES or ~/.sme-modbus-sim/templates)")
+
+
 def _validate(argv) -> int:
     from .config import load_file
 
     ap = argparse.ArgumentParser(prog="sme-modbus-sim validate", description="check a config file")
     ap.add_argument("config")
+    _tdir_arg(ap)
     args = ap.parse_args(argv)
+    _load_templates(args.templates_dir)
     try:
         cfg = load_file(args.config)
     except Exception as e:
@@ -46,10 +62,13 @@ def _validate(argv) -> int:
 def _templates(argv) -> int:
     from .templates import template_catalog
 
-    argparse.ArgumentParser(prog="sme-modbus-sim templates", description="list device templates").parse_args(argv)
+    ap = argparse.ArgumentParser(prog="sme-modbus-sim templates", description="list device templates")
+    _tdir_arg(ap)
+    _load_templates(ap.parse_args(argv).templates_dir)
     for t in template_catalog():
         params = ", ".join(f"{k}={v!r}" for k, v in t["params"].items())
-        print(f"{t['name']:<14} {t['title']}" + (f"\n{'':<14} params: {params}" if params else ""))
+        src = f"  [user: {t['path']}]" if t["source"] == "user" else ""
+        print(f"{t['name']:<14} {t['title']}{src}" + (f"\n{'':<14} params: {params}" if params else ""))
     return 0
 
 
@@ -69,6 +88,7 @@ def main(argv=None) -> int:
     ap.add_argument("--host", default="127.0.0.1", help="web UI host (use 0.0.0.0 to expose on the LAN)")
     ap.add_argument("--http-port", type=int, default=8080, help="web UI port")
     ap.add_argument("--no-browser", action="store_true", help="do not open the web UI in a browser")
+    _tdir_arg(ap)
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(rest)
 
@@ -78,6 +98,7 @@ def main(argv=None) -> int:
     from .config import SimConfig, load_file
     from .engine import Engine
 
+    _load_templates(args.templates_dir)  # before the config: devices may use user templates
     path = args.config
     if path is None and DEFAULT_CONFIG.exists():
         path = str(DEFAULT_CONFIG)

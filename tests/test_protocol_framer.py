@@ -1,3 +1,4 @@
+import pytest
 from sme_modbus_sim.protocol.framer import (
     DroppedFrame,
     Frame,
@@ -69,12 +70,23 @@ def test_rtu_bad_crc_dropped():
 
 
 def test_rtu_unknown_fc_flush_partial():
-    frame = RtuFramer.build(1, bytes.fromhex("2B0E0100"))
+    frame = RtuFramer.build(1, bytes.fromhex("2B0D0100"))
     f = RtuFramer()
     assert f.feed(frame) == []
     assert f.has_partial
     out = f.flush_partial()
-    assert isinstance(out[0], Frame) and out[0].pdu == bytes.fromhex("2B0E0100")
+    assert isinstance(out[0], Frame) and out[0].pdu == bytes.fromhex("2B0D0100")
     assert f.flush_partial() == []
     f.feed(b"\x01")
     assert isinstance(f.flush_partial()[0], DroppedFrame)
+
+
+@pytest.mark.parametrize("pdu", [
+    bytes.fromhex("1600040F0F0001"),                 # FC16
+    bytes.fromhex("17000000020001000104AAAABBBB"),   # FC17
+    bytes.fromhex("2B0E0100"),                       # FC2B / 0E
+])
+def test_rtu_length_new_fcs(pdu):
+    frame = RtuFramer.build(1, pdu)
+    out = RtuFramer().feed(frame + frame)
+    assert [o.pdu for o in out] == [pdu, pdu]

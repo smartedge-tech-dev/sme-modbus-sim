@@ -16,6 +16,9 @@ class FunctionCode(IntEnum):
     WRITE_SINGLE_REGISTER = 0x06
     WRITE_MULTIPLE_COILS = 0x0F
     WRITE_MULTIPLE_REGISTERS = 0x10
+    MASK_WRITE_REGISTER = 0x16
+    READ_WRITE_MULTIPLE_REGISTERS = 0x17
+    ENCAPSULATED_INTERFACE = 0x2B  # only MEI type 0x0E (Read Device Identification)
 
 
 class ExceptionCode(IntEnum):
@@ -32,13 +35,21 @@ class ExceptionCode(IntEnum):
 
 
 SUPPORTED_FUNCTION_CODES = frozenset(int(fc) for fc in FunctionCode)
-WRITE_FUNCTION_CODES = frozenset({0x05, 0x06, 0x0F, 0x10})
+WRITE_FUNCTION_CODES = frozenset({0x05, 0x06, 0x0F, 0x10, 0x16, 0x17})
 
 # Quantity limits (Application Protocol V1.1b3, section 6).
 MAX_READ_BITS = 2000          # FC01 / FC02: 0x0001..0x07D0
 MAX_READ_REGISTERS = 125      # FC03 / FC04: 0x0001..0x007D
 MAX_WRITE_COILS = 1968        # FC0F: 0x0001..0x07B0
 MAX_WRITE_REGISTERS = 123     # FC10: 0x0001..0x007B
+MAX_RW_WRITE_REGISTERS = 121  # FC17 write part: 0x0001..0x0079
+
+# FC2B / MEI 0x0E Read Device Identification (section 6.21)
+MEI_READ_DEVICE_ID = 0x0E
+DEVICE_ID_BASIC = 0x01
+DEVICE_ID_REGULAR = 0x02
+DEVICE_ID_EXTENDED = 0x03
+DEVICE_ID_INDIVIDUAL = 0x04
 
 COIL_ON = 0xFF00
 COIL_OFF = 0x0000

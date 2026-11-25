@@ -2,6 +2,7 @@
 
 App factory, ``_bad()`` error mapping and the ``/ws`` snapshot/dedup loop follow sme-bac-sim
 ``sme_bacnet_sim/web.py`` @ ebd27ec.
+Excel import / export (design 5.6) and user-local template routes (design 5.3.1) are ModbusSim additions.
 """
 
 from __future__ import annotations
@@ -11,21 +12,32 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
 from . import __version__
 from .config import parse_text
 from .engine import Engine
+from . import templates as tpl
 from .templates import template_catalog
+from .xlsx import EXPORT_FILE, TEMPLATE_FILE, blank_template, export_xlsx, import_xlsx, to_yaml
+
+XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 STATIC = Path(__file__).resolve().parent / "static"
 
 
 class WriteReq(BaseModel):
     value: Any
+
+
+class SaveTemplateReq(BaseModel):
+    name: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    overwrite: bool = False
 
 
 class SimulationReq(BaseModel):
@@ -74,6 +86,38 @@ def create_app(engine: Engine, config_path: Optional[str | Path] = None) -> Fast
     async def templates():
         return template_catalog()
 
+    @app.post("/api/templates/reload")
+    async def reload_templates():
+        errors = tpl.load_user_templates()
+        engine.log_event("config", f"user templates reloaded from {tpl.templates_dir()} "
+                                   f"({len(tpl.USER_TEMPLATES)} loaded, {len(errors)} with errors)")
+        return {"dir": str(tpl.templates_dir()), "loaded": sorted(tpl.USER_TEMPLATES), "errors": errors,
+                "templates": template_catalog()}
+
+    @app.post("/api/templates/from-device/{device}")
+    async def template_from_device(device: str, req: SaveTemplateReq):
+        dev = next((d for d in engine.config.devices if d.name == device), None)
+        if dev is None:
+            raise HTTPException(404, f"unknown device {device!r}")
+        try:
+            text = tpl.device_as_template(dev, req.name, req.title, req.description)
+        except ValueError as e:
+            raise _bad(e) from None
+        path = tpl.templates_dir() / f"{req.name}.yaml"
+        if path.exists() and not req.overwrite:
+            raise HTTPException(409, f"{path} already exists (set overwrite to replace it)")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        except OSError as e:
+            raise HTTPException(400, f"cannot write {path}: {e.strerror or e}") from None
+        errors = tpl.load_user_templates()
+        mine = [e for e in errors if Path(e["path"]) == path]
+        if mine:
+            raise HTTPException(400, f"saved {path} but it does not load: {mine[0]['error']}")
+        engine.log_event("config", f"device {device} saved as user template {req.name!r} ({path})")
+        return {"ok": True, "name": req.name, "path": str(path)}
+
     @app.get("/api/history/{device}/{point}")
     async def history(device: str, point: str):
         point_or_404(device, point)
@@ -110,6 +154,34 @@ def create_app(engine: Engine, config_path: Optional[str | Path] = None) -> Fast
         except Exception as e:  # validation, YAML syntax, behavior or bind errors
             raise _bad(e) from None
         return {"ok": True, "devices": len(engine.devices)}
+
+    @app.get("/api/config/xlsx")
+    async def config_xlsx():
+        try:
+            data = export_xlsx(engine.config)
+        except ValueError as e:
+            raise _bad(e) from None
+        return Response(data, media_type=XLSX_TYPE,
+                        headers={"Content-Disposition": f'attachment; filename="{EXPORT_FILE}"'})
+
+    @app.get("/api/config/xlsx-template")
+    async def config_xlsx_template():
+        return Response(blank_template(), media_type=XLSX_TYPE,
+                        headers={"Content-Disposition": f'attachment; filename="{TEMPLATE_FILE}"'})
+
+    @app.post("/api/config/import")
+    async def config_import(file: UploadFile = File(...)):
+        cfg, msgs = import_xlsx(await file.read(), engine.config)
+        if cfg is None:
+            raise HTTPException(400, {"message": f"{len(msgs)} error(s) in {file.filename or 'the workbook'}",
+                                      "errors": msgs})
+        try:
+            await engine.reload(cfg, to_yaml(cfg))
+        except Exception as e:  # behavior compile / bind errors
+            raise HTTPException(400, {"message": "the imported configuration cannot be applied",
+                                      "errors": [str(e)]}) from None
+        engine.log_event("config", f"Excel point table imported ({file.filename}, {len(engine.devices)} devices)")
+        return {"ok": True, "devices": len(engine.devices), "warnings": msgs}
 
     @app.post("/api/config/save")
     async def save_config():

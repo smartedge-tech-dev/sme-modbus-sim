@@ -156,6 +156,23 @@ Shell.addStrings("en", {
   "cfg.save": "Save to file",
   "cfg.saved": "Saved to {path}",
   "cfg.applied": "Configuration applied ({n} devices)",
+  "menu.file.xlsx.export": "Export Excel point table",
+  "menu.file.xlsx.blank": "Download blank Excel template",
+  "menu.file.xlsx.import": "Import Excel point table…",
+  "menu.tpl": "Templates",
+  "menu.tpl.reload": "Reload user templates",
+  "xlsx.imported": "Excel point table imported ({n} devices)",
+  "xlsx.errors.title": "Excel import errors",
+  "xlsx.errors.hint": "Nothing was applied. Fix the listed rows and import again.",
+  "xlsx.warnings.title": "Imported with warnings",
+  "tpl.reloaded": "User templates reloaded: {n} from {dir}",
+  "tpl.errors.title": "Skipped user template files",
+  "tpl.save": "Save as template",
+  "tpl.save.title": "Save this device's expanded points as a user template",
+  "tpl.save.prompt": "Template name (letters, digits, _ . -)",
+  "tpl.save.exists": "Template '{name}' already exists. Overwrite it?",
+  "tpl.saved": "Template {name} saved to {path}",
+  "errdlg.close": "Close",
   "dlg.cancel": "Cancel",
   "dlg.apply": "Apply",
   "about.stack": "Protocol stack",
@@ -374,7 +391,9 @@ function renderDevice() {
   $("devHeader").innerHTML = `<h2>${esc(d.name)}</h2>
     ${d.description ? `<span class="meta">${esc(d.description)}</span>` : ""}
     <span class="meta">${esc(t("dev.meta", { unit: d.unit_id, tpl: d.template || t("dev.custom"), lsn: (d.listeners || []).join(", "),
-      bo: d.byte_order, wo: d.word_order, ua: d.undefined_address }))}</span>`;
+      bo: d.byte_order, wo: d.word_order, ua: d.undefined_address }))}</span>
+    <button type="button" class="btn small tplsave" id="tplSave" title="${esc(t("tpl.save.title"))}">${esc(t("tpl.save"))}</button>`;
+  $("tplSave").onclick = () => saveAsTemplate(d.name);
   const f = S.filter.toLowerCase().trim();
   const showAll = !f || d.name.toLowerCase().includes(f) || String(d.unit_id) === f;
   for (const p of d.points) {
@@ -757,6 +776,70 @@ $("yamlSave").onclick = async () => {
   } catch (e) { $("yamlErr").textContent = e.message; }
 };
 
+// ------------------------------------------------------------------ Excel point table / user templates
+
+function showErrors(title, hint, errors) {
+  $("errTitle").textContent = title;
+  $("errHint").textContent = hint || "";
+  $("errList").innerHTML = errors.map((e) => `<li>${esc(e)}</li>`).join("");
+  $("dlgErrors").showModal();
+}
+
+function download(url) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function importXlsx(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const r = await fetch("/api/config/import", { method: "POST", body: fd });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const d = data.detail;
+      if (d && Array.isArray(d.errors)) showErrors(t("xlsx.errors.title"), `${d.message} — ${t("xlsx.errors.hint")}`, d.errors);
+      else toast(typeof d === "string" ? d : `HTTP ${r.status}`);
+      return;
+    }
+    Shell.toast(t("xlsx.imported", { n: data.devices }), "ok");
+    if (data.warnings?.length) showErrors(t("xlsx.warnings.title"), "", data.warnings);
+  } catch (e) { toast(e.message); }
+}
+
+$("xlsxFile").onchange = (ev) => {
+  const f = ev.target.files[0];
+  ev.target.value = "";
+  if (f) importXlsx(f);
+};
+
+async function reloadTemplates() {
+  try {
+    const r = await api("POST", "/api/templates/reload");
+    Shell.toast(t("tpl.reloaded", { n: r.loaded.length, dir: r.dir }), "ok");
+    if (r.errors.length) showErrors(t("tpl.errors.title"), r.dir, r.errors.map((e) => `${e.path}: ${e.error}`));
+  } catch (e) { toast(e.message); }
+}
+
+async function saveAsTemplate(dev) {
+  const name = prompt(t("tpl.save.prompt"), dev.replace(/[^A-Za-z0-9_.-]+/g, "_").toLowerCase());
+  if (!name) return;
+  const url = `/api/templates/from-device/${encodeURIComponent(dev)}`;
+  try {
+    let r;
+    try { r = await api("POST", url, { name }); }
+    catch (e) {
+      if (!/already exists/.test(e.message) || !confirm(t("tpl.save.exists", { name }))) throw e;
+      r = await api("POST", url, { name, overwrite: true });
+    }
+    Shell.toast(t("tpl.saved", { name: r.name, path: r.path }), "ok");
+  } catch (e) { toast(e.message); }
+}
+
 // ------------------------------------------------------------------ shell
 
 Shell.init({
@@ -766,11 +849,18 @@ Shell.init({
     { id: "file", label: "menu.file", items: [
       { id: "file.config", label: "menu.file.config", onClick: editConfig },
       { separator: true },
+      { id: "file.xlsx.export", label: "menu.file.xlsx.export", onClick: () => download("/api/config/xlsx") },
+      { id: "file.xlsx.blank", label: "menu.file.xlsx.blank", onClick: () => download("/api/config/xlsx-template") },
+      { id: "file.xlsx.import", label: "menu.file.xlsx.import", onClick: () => $("xlsxFile").click() },
+      { separator: true },
       { id: "file.save", label: "menu.file.save", title: t("menu.file.save.title"), onClick: () => saveConfig().catch((e) => toast(e.message)) },
     ] },
     { id: "sim", label: "menu.sim", items: [
       { id: "sim.run", label: "menu.sim.pause", onClick: toggleRun },
       { id: "sim.speed", label: "menu.sim.speed", submenu: speedItems(null) },
+    ] },
+    { id: "tpl", label: "menu.tpl", items: [
+      { id: "tpl.reload", label: "menu.tpl.reload", onClick: reloadTemplates },
     ] },
     { id: "view", label: "menu.view", items: [
       { id: "view.traffic", label: "menu.view.traffic", onClick: () => showTab("traffic") },

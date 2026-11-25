@@ -38,9 +38,31 @@ def test_register_count(dt, extra, n):
     assert register_count(PointConfig(name="p", table="holding", datatype=dt, **extra)) == n
 
 
-def test_rtu_reserved_for_020():
-    with pytest.raises(ValidationError, match="not supported in 0.1.0"):
-        parse_text("listeners: [{id: com1, type: rtu, port: COM5, baud: 9600}]")
+def test_rtu_serial_listener_defaults():
+    cfg = parse_text("listeners: [{id: com1, type: rtu, port: COM5}, {id: t, port: 502}]")
+    lst = cfg.listeners[0]
+    assert (lst.port, lst.baudrate, lst.bytesize, lst.parity, lst.stopbits, lst.strict_timing) == (
+        "COM5", 19200, 8, "E", 1, False)
+    no_parity = parse_text("listeners: [{id: c, type: rtu, port: /dev/ttyUSB0, parity: N, baudrate: 19200}]")
+    assert (no_parity.listeners[0].parity, no_parity.listeners[0].stopbits) == ("N", 2)  # spec: N -> 2 stop bits
+    compat = parse_text("listeners: [{id: c, type: rtu, port: COM3, parity: N, stopbits: 1}]")
+    assert compat.listeners[0].stopbits == 1  # non-conforming 8N1 accepted
+    assert "baudrate" not in dump_yaml(cfg.listeners[1])
+
+
+@pytest.mark.parametrize("ls, msg", [
+    ("[{id: c, type: rtu}]", "needs port"),
+    ("[{id: c, type: rtu, port: COM5, parity: X}]", "parity"),
+    ("[{id: c, type: rtu, port: COM5, stopbits: 3}]", "stopbits"),
+    ("[{id: c, type: rtu, port: COM5, bytesize: 7}]", "bytesize"),
+    ("[{id: t, port: 502, baudrate: 9600}]", "only apply to type rtu"),
+    ("[{id: t, port: COM5}]", "TCP port"),
+    ("[{id: t, port: 70000}]", "TCP port"),
+    ("[{id: a, type: rtu, port: COM5}, {id: b, type: rtu, port: COM5}]", "same port"),
+])
+def test_rtu_serial_listener_invalid(ls, msg):
+    with pytest.raises(ValidationError, match=msg):
+        parse_text(f"listeners: {ls}")
 
 
 @pytest.mark.parametrize("point, msg", [

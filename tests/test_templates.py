@@ -115,3 +115,69 @@ def test_demo_site_expands_and_cross_refs_resolve():
                         assert dev in exp and pt in exp[dev], f"{name}/{p.name}: pv({dev}, {pt})"
                         refs += 1
     assert refs >= 4
+
+
+# ---------------------------------------------------------------- user-local templates
+
+from sme_modbus_sim import templates as tplmod  # noqa: E402
+
+
+@pytest.fixture()
+def user_dir(tmp_path):
+    yield tmp_path
+    tplmod.clear_user_templates()
+
+
+def test_user_templates_load_override_and_errors(user_dir):
+    (user_dir / "inv.yaml").write_text("""
+title: My inverter
+description: test inverter
+params: {rated_kw: 10}
+points:
+  - {name: p, table: holding, address: 0, datatype: int16, max: "{rated_kw}", description: "limit {rated_kw} kW {{raw}}"}
+  - {name: q, table: input, behavior: {type: expr, expr: "p * {rated_kw}"}}
+""", encoding="utf-8")
+    (user_dir / "custom.yml").write_text("name: custom\ntitle: Overridden\npoints: [{name: x, table: coil}]\n",
+                                         encoding="utf-8")
+    (user_dir / "bad.yaml").write_text("points: [{name: y, table: holding, datatype: bool}]\n", encoding="utf-8")
+    (user_dir / "bad2.yaml").write_text("foo: 1\n", encoding="utf-8")
+    (user_dir / "bad3.yaml").write_text("points: [{name: z, table: input, max: '{nope}'}]\n", encoding="utf-8")
+    (user_dir / "broken.yaml").write_text("points: [\n", encoding="utf-8")
+    (user_dir / "zdup.yaml").write_text("name: inv\npoints: []\n", encoding="utf-8")
+    errs = tplmod.load_user_templates(user_dir)
+    assert {Path(e["path"]).name for e in errs} == {"bad.yaml", "bad2.yaml", "bad3.yaml", "broken.yaml", "zdup.yaml"}
+    assert any("unknown parameter 'nope'" in e["error"] for e in errs)
+    cat = {t["name"]: t for t in template_catalog()}
+    assert cat["inv"]["source"] == "user" and cat["inv"]["description"] == "test inverter"
+    assert cat["custom"]["source"] == "user" and cat["custom"]["overrides_builtin"] and cat["custom"]["title"] == "Overridden"
+    assert cat["battery_pcs"]["source"] == "builtin" and "path" not in cat["battery_pcs"]
+    pts = {p.name: p for p in expand_device(_dev(template="inv", params={"rated_kw": 20}))}
+    assert pts["p"].max == 20 and pts["p"].description == "limit 20 kW {raw}"
+    assert pts["q"].behavior["expr"] == "p * 20" and (pts["q"].table, pts["q"].address) == ("input", 0)
+    assert [p.name for p in expand_device(_dev(template="custom"))] == ["x"]
+    assert parse_text("devices: [{name: D, unit_id: 1, template: inv}]").devices[0].template == "inv"
+    tplmod.clear_user_templates()
+    assert [t["name"] for t in template_catalog()] == ["battery_pcs", "bms", "power_meter", "env_sensor", "custom"]
+    with pytest.raises(ValueError, match="unknown template"):
+        expand_device(_dev(template="inv"))
+
+
+def test_templates_dir_default_and_env(monkeypatch, tmp_path):
+    monkeypatch.delenv(tplmod.ENV_TEMPLATES_DIR, raising=False)
+    assert tplmod.default_templates_dir() == Path.home() / ".sme-modbus-sim" / "templates"
+    monkeypatch.setenv(tplmod.ENV_TEMPLATES_DIR, str(tmp_path / "t"))
+    assert tplmod.default_templates_dir() == tmp_path / "t"
+    assert tplmod.load_user_templates(tmp_path / "missing") == []
+
+
+def test_device_as_template_round_trip(user_dir):
+    dev = _dev(template="battery_pcs", params={"rated_kw": 20}, byte_order="little",
+               points=[{"name": "p_setpoint", "description": "set {x}"}])
+    (user_dir / "my_pcs.yaml").write_text(tplmod.device_as_template(dev, "my_pcs"), encoding="utf-8")
+    assert tplmod.load_user_templates(user_dir) == []
+    strip = lambda pts: [{k: v for k, v in p.model_dump().items() if k != "byte_order"} for p in pts]  # noqa: E731
+    saved = expand_device(_dev(template="my_pcs", byte_order="little"))
+    assert strip(saved) == strip(expand_device(dev))
+    assert all(p.byte_order == "little" for p in saved)
+    with pytest.raises(ValueError, match="invalid template name"):
+        tplmod.device_as_template(dev, "a b")

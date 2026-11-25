@@ -112,6 +112,17 @@ def rtu_request_length(buf: bytes) -> int | None:
         if len(buf) < 7:
             return None
         return 9 + buf[6]
+    if fc == 0x16:  # unit fc ref(2) and(2) or(2) crc(2)
+        return 10
+    if fc == 0x17:  # unit fc raddr(2) rqty(2) waddr(2) wqty(2) count(1) values crc(2)
+        if len(buf) < 11:
+            return None
+        return 13 + buf[10]
+    if fc == 0x2B:
+        if len(buf) < 3:
+            return None
+        if buf[2] == 0x0E:  # unit fc mei code object-id crc(2)
+            return 7
     return -1
 
 

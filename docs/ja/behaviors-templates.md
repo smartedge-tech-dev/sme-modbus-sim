@@ -35,3 +35,33 @@ Modbus マスターや UI から書き込まれた値は、データ型、`min` 
 パラメーターは `sme-modbus-sim templates` で確認できます。テンプレートは汎用の独自定義で、特定メーカーのレジスタマップは
 内蔵していません。公開されている SunSpec モデル定義から生成したテンプレートは 0.2.0 で提供予定です
 （SunSpec Alliance とは提携・推奨・認証の関係にありません）。
+
+
+## User-local templates
+
+自前のテンプレートはインストール先の外、YAML ファイルを置いたディレクトリに保存します:
+コマンドラインの `--templates-dir DIR`、なければ `$SME_MODBUS_SIM_TEMPLATES`、なければ `~/.sme-modbus-sim/templates/`。
+起動時（設定より先なので、デバイスから利用できます）と **テンプレート › ユーザーテンプレートを再読込**
+（`POST /api/templates/reload`）で読み込まれます。組み込みテンプレートと同名のユーザーテンプレートは組み込みを置き換えます。
+エラーのあるファイルはスキップして報告され、シミュレーターを止めることはありません。
+
+```yaml
+# ~/.sme-modbus-sim/templates/my_inverter.yaml
+name: my_inverter          # 既定: ファイル名
+title: My PV inverter
+description: Register map of our inverter
+params: {rated_kw: 10}     # 既定値。デバイスの params: で上書き
+points:                    # デバイスの points: と同じスキーマ
+  - {name: p_limit, table: holding, address: 0, datatype: uint16, scale: 0.1, max: "{rated_kw}"}
+  - {name: p_actual, table: input, address: 0, datatype: int16, scale: 0.1,
+     behavior: {type: expr, expr: "min(p_limit, {rated_kw} * 0.8)"}}
+```
+
+パラメータは**文字列**の値の中でだけ、Python の `str.format` の規則で置換されます（`{rated_kw}` → パラメータ値）。
+プレースホルダー 1 つだけの文字列（`"{rated_kw}"`）は値を型ごと受け取るため、数値フィールドにも使えます。
+波括弧そのものは `{{` / `}}` と書きます。
+
+デバイスヘッダーの **テンプレートとして保存**（`POST /api/templates/from-device/{device}`、本文
+`{"name": ..., "overwrite": false}`）は、デバイスの展開済みポイントをテンプレートファイルとしてこのディレクトリに書き出します。
+[Excel](excel.md) でベンダーのレジスタマップを取り込んだ後などに使います。`GET /api/templates` は各テンプレートに
+`source`（`builtin` / `user`）と、ユーザーテンプレートではファイルの `path` を付けて返します。

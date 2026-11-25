@@ -40,6 +40,7 @@ from .config import BIT_TABLES, DeviceConfig, PointConfig, SimConfig, dump_yaml,
 from .protocol import datatypes as dtypes
 from .protocol.constants import ExceptionCode
 from .protocol.errors import ModbusError
+from .protocol.serial_server import ModbusSerialServer
 from .protocol.server import ModbusTcpServer, TraceEvent
 from .protocol.store import UnitStore
 from .templates import expand_device
@@ -207,6 +208,26 @@ class PointRuntime:
                 "labels": c.labels, "behavior": self.behavior_type, **self.status()}
 
 
+DEFAULT_VENDOR_NAME = "SmartEdge"
+DEFAULT_PRODUCT_CODE = "SME-MODBUS-SIM"
+_IDENT_OBJECTS = ("vendor_name", "product_code", "revision", "vendor_url", "product_name", "model_name",
+                  "user_application_name")  # object ids 0x00..0x06
+
+
+def identification_objects(cfg: DeviceConfig) -> Dict[int, str]:
+    """FC2B/0E objects of a device; the three mandatory basic objects always exist."""
+    ident = cfg.identification
+    out: Dict[int, str] = {}
+    for oid, field in enumerate(_IDENT_OBJECTS):
+        v = getattr(ident, field) if ident is not None else None
+        if v is not None:
+            out[oid] = v
+    out.setdefault(0x00, DEFAULT_VENDOR_NAME)
+    out.setdefault(0x01, DEFAULT_PRODUCT_CODE)
+    out.setdefault(0x02, __version__)
+    return out
+
+
 class DeviceRuntime:
     def __init__(self, engine: "Engine", cfg: DeviceConfig, base_dir: Optional[Path], config: SimConfig):
         self.cfg = cfg
@@ -238,6 +259,7 @@ class DeviceRuntime:
                 p.set_value(p.cfg.value if p.cfg.value is not None else default)
             except Exception as e:
                 raise ValueError(f"{cfg.name}/{p.name}: initial value {p.cfg.value!r}: {e}") from None
+        self.store.identification = identification_objects(cfg)
         self.store.add_write_validator(self._validate_write)
         self.store.on_write(lambda table, address, count: engine._on_protocol_write(self, table, address, count))
 
@@ -348,11 +370,19 @@ class Engine:
         o = self.listener_overrides.get(lc.id, {})
         return o.get("host", lc.host), o.get("port", lc.port)
 
-    def _make_servers(self) -> Dict[str, ModbusTcpServer]:
-        servers = {}
+    def _make_servers(self) -> Dict[str, Any]:
+        servers: Dict[str, Any] = {}
         for lc in self.config.listeners:
             units = {d.cfg.unit_id: d.store for d in self.devices.values() if lc.id in d.listeners}
             host, port = self._listener_addr(lc)
+            self.stats.setdefault(lc.id, ListenerStats())
+            if lc.type == "rtu":
+                servers[lc.id] = ModbusSerialServer(
+                    str(port), lc.baudrate or 9600, lc.bytesize or 8, lc.parity or "E", lc.stopbits or 1,
+                    resolver=units.get, unit_id_mode=lc.unit_id_mode, default_unit=lc.default_unit,
+                    trace=self._on_trace, listener_id=lc.id, all_units=lambda u=units: list(u.values()),
+                    strict_timing=bool(lc.strict_timing))
+                continue
             servers[lc.id] = ModbusTcpServer(
                 host, port, framer=lc.type, resolver=units.get, unit_id_mode=lc.unit_id_mode,
                 default_unit=lc.default_unit, trace=self._on_trace, listener_id=lc.id,
@@ -360,7 +390,9 @@ class Engine:
             self.stats.setdefault(lc.id, ListenerStats())
         return servers
 
-    async def _start_servers(self, servers: Dict[str, ModbusTcpServer]) -> None:
+    async def _start_servers(self, servers: Dict[str, Any]) -> None:
+        """Start all listeners. TCP bind errors abort (and roll back); a serial port that cannot be
+        opened only marks that listener ``error`` so the other listeners keep serving."""
         started = []
         try:
             for lid, s in servers.items():
@@ -381,9 +413,15 @@ class Engine:
         self._stopping = False
         self.servers = self._make_servers()
         await self._start_servers(self.servers)
-        for lid, s in self.servers.items():
-            self.log_event("info", f"listener {lid} ({s.framer}) on {s.host}:{s.bound_port}")
+        self._log_listeners(self.servers)
         self._task = asyncio.create_task(self._run())
+
+    def _log_listeners(self, servers: Dict[str, Any]) -> None:
+        for lid, s in servers.items():
+            if s.error:
+                self.log_event("error", f"listener {lid} ({s.framer}): {s.error}")
+            else:
+                self.log_event("info", f"listener {lid} ({s.framer}) on {s.endpoint}")
 
     async def stop(self) -> None:
         self._stopping = True
@@ -421,6 +459,9 @@ class Engine:
                 raise
             self.servers = new_servers
             self.stats = {lid: self.stats.get(lid, ListenerStats()) for lid in new_servers}
+            for lid, s in new_servers.items():
+                if s.error:
+                    self.log_event("error", f"listener {lid} ({s.framer}): {s.error}")
             self.config_text = config_text if config_text is not None else dump_yaml(config)
         self.log_event("config", f"configuration reloaded ({len(self.devices)} devices)")
         self.publish({"type": "reload"})
@@ -476,9 +517,10 @@ class Engine:
             s = self.servers.get(lc.id)
             st = self.stats.get(lc.id, ListenerStats()).as_dict()
             host, port = self._listener_addr(lc)
-            out[lc.id] = {"type": lc.type, "host": host, "port": port,
+            out[lc.id] = {"type": lc.type, "host": None if lc.type == "rtu" else host, "port": port,
                           "bound_port": s.bound_port if s else None,
-                          "clients": s.client_count if s else 0, **st}
+                          "clients": s.client_count if s else 0,
+                          "status": s.status if s else "stopped", "error": s.error if s else None, **st}
         return out
 
     # ------------------------------------------------------- protocol write
@@ -536,7 +578,7 @@ class Engine:
         return {"version": __version__, "running": sim.running, "time_scale": sim.time_scale,
                 "tick_seconds": sim.tick_seconds, "sim_time": self.sim_time, "sim_hour": self.sim_hour,
                 "listeners": [{"id": l.id, "type": l.type, **{k: v for k, v in stats[l.id].items()
-                                                              if k in ("host", "port", "bound_port", "clients")}}
+                                                              if k in ("host", "port", "bound_port", "clients", "status", "error")}}
                               for l in self.config.listeners],
                 "devices": [d.info() for d in self.devices.values()],
                 "events": list(self.events), "stats": stats}
