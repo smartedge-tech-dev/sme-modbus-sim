@@ -267,13 +267,13 @@ function rowHtml(p) {
   const bitn = p.bit != null ? ` <small class="muted">.${p.bit}</small>` : "";
   const err = p.error ? ` <span class="errmark" title="${esc(p.error)}">⚠</span>` : "";
   return `<td class="nm">${esc(p.name)}${err}${p.description ? `<small>${esc(p.description)}</small>` : ""}</td>
-    <td>${esc(t(`table.${p.table}`))}</td>
+    <td class="tb">${esc(t(`table.${p.table}`))}</td>
     <td class="num mono">${fmtAddr(p)}${bitn}${regs}</td>
-    <td class="mono">${esc(p.datatype)}${p.count > 1 ? `[${p.count}]` : ""}</td>
-    <td class="mono">${fmtOrder(p)}</td>
+    <td class="mono nw">${esc(p.datatype)}${p.count > 1 ? `[${p.count}]` : ""}</td>
+    <td class="mono nw">${fmtOrder(p)}</td>
     <td class="val">${valHtml(p)}</td>
     <td class="raw">${esc(fmtRaw(p))}</td>
-    <td class="mono" title="${esc(t(`access.${p.access}.title`))}">${esc(t(`access.${p.access}`))}</td>
+    <td class="mono nw" title="${esc(t(`access.${p.access}.title`))}">${esc(t(`access.${p.access}`))}</td>
     <td class="mono muted">${esc(p.behavior || "")}</td>`;
 }
 

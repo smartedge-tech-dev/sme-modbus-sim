@@ -86,6 +86,9 @@ table.points { width: 100%; border-collapse: collapse; }
 .points tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 .points .num { text-align: right; }
 .points td.nm { min-width: 120px; }
+/* Short label cells: break only between words (never one CJK character per line on narrow windows). */
+.points td.tb { overflow-wrap: normal; word-break: keep-all; min-width: 4.5em; }
+.points td.nw { white-space: nowrap; overflow-wrap: normal; }
 .points .nm small { display: block; color: var(--muted); font-size: 11px; }
 .points .mono { font-family: var(--mono); font-size: 12px; }
 .points .muted { color: var(--muted); }
