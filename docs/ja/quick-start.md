@@ -36,7 +36,7 @@ docker run --rm --device /dev/ttyUSB0 --group-add dialout -p 8081:8081 \
 
 マスター側: `modpoll -m rtu -b 19200 -d 8 -p even -a 1 -0 -r 0 -c 4 -t 4 COM6`（シリアル接続の相手側）、RTU over TCP は `modpoll -m enc -p 5021 -a 4 -0 -r 0 -c 2 -t 3 127.0.0.1`。
 
-1 台の Windows PC で試す場合: Windows には仮想 COM ポートのペアが標準で用意されていません。選択肢: [SerialLoom](https://github.com/RahulP5/SerialLoom)（無料、MIT。Microsoft 署名済みの usbip-win2 ホストコントローラーを使い、COM ポートは Windows 標準の usbser ドライバーが作ります）、署名済みの市販仮想シリアルポートドライバー、USB-RS485 アダプター 2 本の相互配線（A-A、B-B）。SerialLoom では、pyserial の `inter_byte_timeout` を設定するマスター（modbus_tk は既定で設定）が断続的に 0 バイトを読むため、マスター側で `None` にしてください。仮想ペアは RTS / DTR を伝えず、ボーレートどおりの速度にもなりません。com0com 3.0 の 64 ビットドライバーは正式署名されておらず、セキュアブート有効時には読み込まれません。ドライバーなしで RTU フレームを試すなら `rtu_over_tcp` リスナーを使えます。Linux では `socat -d -d pty,raw,echo=0 pty,raw,echo=0` で接続済みの pty ペアを作れます。
+1 台の Windows PC で試す場合: Windows には仮想 COM ポートのペアが標準で用意されていません。選択肢: [SerialLoom](https://github.com/RahulP5/SerialLoom)（無料、MIT。Microsoft 署名済みの usbip-win2 ホストコントローラーを使い、COM ポートは Windows 標準の usbser ドライバーが作ります）、署名済みの市販仮想シリアルポートドライバー、USB-RS485 アダプター 2 本の相互配線（A-A、B-B）。Windows 標準の usbser ドライバーは最初のバイトが届く前からバイト間タイムアウト（`ReadIntervalTimeout`）を数え始めるため、pyserial の `inter_byte_timeout` を設定するマスター（modbus_tk は既定で設定）は、応答がシステムタイマー約 1 周期（約 16 ms）より遅れると 0 バイトを読みます。SerialLoom で試験するときはマスター側で `None` にしてください。SerialLoom は現時点で RTS / DTR を伝えません。仮想ペアは RTS / DTR を伝えず、ボーレートどおりの速度にもなりません。com0com 3.0 の 64 ビットドライバーは正式署名されておらず、セキュアブート有効時には読み込まれません。ドライバーなしで RTU フレームを試すなら `rtu_over_tcp` リスナーを使えます。Linux では `socat -d -d pty,raw,echo=0 pty,raw,echo=0` で接続済みの pty ペアを作れます。
 
 ## ソースから実行
 
