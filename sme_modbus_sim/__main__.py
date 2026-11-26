@@ -30,7 +30,10 @@ from . import __version__
 
 APP_NAME = "sme-modbus-sim"
 DEFAULT_HTTP_PORT = 8081  # series port table (sme-sim-common README)
-DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "configs" / "demo-site.yaml"
+_PKG = Path(__file__).resolve().parent
+# installed wheel: sme_modbus_sim/configs; source tree, Docker image and Windows exe: configs/ beside the package
+DEFAULT_CONFIG = next((p for p in (_PKG / "configs" / "demo-site.yaml", _PKG.parent / "configs" / "demo-site.yaml")
+                       if p.exists()), _PKG.parent / "configs" / "demo-site.yaml")
 
 
 def _progress(text: str) -> None:

@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-26
+
+### Fixed
+
+- `pip install` / `pipx install`: the demo configurations are now part of the package, so `sme-modbus-sim` without `-c` starts with the demo site instead of an empty configuration. The PyPI summary mentions UDP and TLS.
+
 ## [0.3.1] - 2026-11-26
 
 ### Fixed

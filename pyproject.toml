@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sme-modbus-sim"
 dynamic = ["version"]
-description = "SME ModbusSim: a free Modbus TCP / RTU over TCP device simulator with a web UI"
+description = "SME ModbusSim: a free Modbus TCP / RTU / UDP / TLS device simulator with a web UI"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
@@ -41,8 +41,11 @@ sme-modbus-sim = "sme_modbus_sim.__main__:main"
 [tool.setuptools.dynamic]
 version = { attr = "sme_modbus_sim.__version__" }
 
-[tool.setuptools.packages.find]
-include = ["sme_modbus_sim*"]
+[tool.setuptools]
+# configs/ ships inside the wheel as sme_modbus_sim/configs so that a pip / pipx install starts with the demo
+packages = ["sme_modbus_sim", "sme_modbus_sim.protocol", "sme_modbus_sim.configs"]
+package-dir = { "sme_modbus_sim.configs" = "configs" }
 
 [tool.setuptools.package-data]
 sme_modbus_sim = ["static/**/*", "data/sunspec/*"]
+"sme_modbus_sim.configs" = ["*.yaml"]
