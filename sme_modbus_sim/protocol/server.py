@@ -1,4 +1,4 @@
-"""asyncio Modbus TCP / RTU-over-TCP server.
+"""asyncio Modbus TCP / RTU-over-TCP / UDP server.
 
 Unit id routing:
   * ``unit_id_mode="any"``    -- every request goes to ``default_unit`` (RTU unit 0 is still broadcast).
@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import socket
 import time
 from dataclasses import dataclass
 from typing import Callable, Iterable
@@ -79,6 +80,8 @@ PduHandler = Callable[[UnitStore, bytes], bytes]
 
 
 class ModbusTcpServer:
+    kind: str = ""  # listener type shown in logs; set from framer unless a subclass fixes it
+
     def __init__(
         self,
         host: str,
@@ -106,6 +109,7 @@ class ModbusTcpServer:
         self.host = host
         self.port = port
         self.framer = framer
+        self.kind = self.kind or framer
         self.resolver: Resolver = resolver or (lambda _uid: None)
         self.unit_id_mode = unit_id_mode
         self.default_unit = default_unit
@@ -269,3 +273,131 @@ class ModbusTcpServer:
             writer.write(raw)
             await writer.drain()
         return True
+
+
+UDP_CLIENT_WINDOW_S = 60.0  # a UDP peer counts as a client for this long after its last datagram
+
+
+class _DatagramWriter:
+    """The ``write`` / ``drain`` subset of ``asyncio.StreamWriter`` used by ``_handle_items``."""
+
+    def __init__(self, sock: socket.socket, addr) -> None:
+        self._sock = sock
+        self._addr = addr
+
+    def write(self, data: bytes) -> None:
+        with contextlib.suppress(OSError):  # closed socket, full buffer: UDP gives no guarantee anyway
+            self._sock.sendto(data, self._addr)
+
+    async def drain(self) -> None:
+        return None
+
+
+def udp_socket(host: str, port: int) -> socket.socket:
+    """Non-blocking UDP socket bound to ``host:port``."""
+    infos = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_DGRAM, 0, socket.AI_PASSIVE)
+    if not infos:
+        raise OSError(f"cannot resolve {host}")
+    fam, _, proto, _, addr = infos[0]
+    sock = socket.socket(fam, socket.SOCK_DGRAM, proto)
+    try:
+        sock.bind(addr)
+        sock.setblocking(False)
+    except BaseException:
+        sock.close()
+        raise
+    return sock
+
+
+class ModbusUdpServer(ModbusTcpServer):
+    """Modbus over UDP: each datagram carries exactly one MBAP ADU; the answer goes to the sender.
+
+    No Modbus specification defines UDP; this follows the common practice of gateways and
+    masters (``modpoll -m udp``, pymodbus): MBAP header, transaction id echoed, no retransmission.
+    A datagram whose length does not match its MBAP length field is dropped. Unit routing and
+    fault injection are those of TCP; ``disconnect`` has no connection to close and leaves the
+    request unanswered, ``refuse_connections`` drops each datagram while it is active.
+    """
+
+    kind = "udp"
+
+    def __init__(self, host: str, port: int, **kw) -> None:
+        kw.pop("framer", None)
+        super().__init__(host, port, framer="tcp", **kw)
+        self._sock: socket.socket | None = None
+        self._reader: asyncio.Task | None = None
+        self._peers: dict[str, float] = {}
+
+    @property
+    def bound_port(self) -> int:
+        if self._sock is not None:
+            return self._sock.getsockname()[1]
+        return self.port
+
+    @property
+    def client_count(self) -> int:
+        cutoff = time.monotonic() - UDP_CLIENT_WINDOW_S
+        for peer in [p for p, t in self._peers.items() if t < cutoff]:
+            del self._peers[peer]
+        return len(self._peers)
+
+    @property
+    def status(self) -> str:
+        return "running" if self._sock is not None else "stopped"
+
+    async def start(self) -> None:
+        self._sock = udp_socket(self.host, self.port)
+        self._reader = asyncio.create_task(self._recv_loop(self._sock))
+
+    async def stop(self) -> None:
+        tasks = [t for t in (self._reader, *self._tasks) if t is not None]
+        for t in tasks:
+            t.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        if self._sock is not None:
+            self._sock.close()
+        self._sock = self._reader = None
+        self._peers.clear()
+
+    async def _recv_loop(self, sock: socket.socket) -> None:
+        # Own receive loop instead of create_datagram_endpoint: on Windows an ICMP port unreachable
+        # (answer to a client that has gone away) fails the next receive with ConnectionResetError,
+        # which stops the proactor datagram transport for good (CPython 3.11).
+        loop = asyncio.get_running_loop()
+        while True:
+            try:
+                data, addr = await loop.sock_recvfrom(sock, 65535)
+            except (ConnectionResetError, ConnectionRefusedError):
+                continue
+            except OSError:
+                if sock.fileno() < 0:
+                    return
+                await asyncio.sleep(0.01)  # transient error: keep serving
+                continue
+            self._on_datagram(data, addr)
+
+    def _on_datagram(self, data: bytes, addr) -> None:
+        if self._sock is None:
+            return
+        peer = f"{addr[0]}:{addr[1]}"
+        hit = self.faults.refuse(self.listener_id) if self.faults is not None else None
+        if hit is not None:
+            self._emit(peer, "rx", data, None, None, "dropped", error="datagram refused (fault)", fault=hit.info)
+            return
+        self._peers[peer] = time.monotonic()
+        task = asyncio.ensure_future(self._serve(data, _DatagramWriter(self._sock, addr), peer))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def _serve(self, data: bytes, writer: _DatagramWriter, peer: str) -> None:
+        if len(data) < 8:
+            items = [DroppedFrame(data, f"datagram too short for MBAP ({len(data)} bytes)")]
+        elif 6 + int.from_bytes(data[4:6], "big") != len(data):
+            items = [DroppedFrame(data, f"MBAP length {int.from_bytes(data[4:6], 'big')} does not match "
+                                        f"datagram of {len(data)} bytes")]
+        else:
+            items = [DroppedFrame(i.raw, i.reason) if isinstance(i, DroppedFrame) else i
+                     for i in MbapFramer().feed(data)]  # never fatal: the next datagram starts afresh
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._handle_items(items, None, writer, peer)

@@ -33,15 +33,29 @@ devices:
 | Key | Meaning |
 |---|---|
 | `id` | Name used by `devices[].listeners` |
-| `type` | `tcp` (Modbus TCP, MBAP), `rtu_over_tcp` (RTU frames with CRC-16 over a TCP socket) `rtu` (serial line, RTU) or `ascii` (serial line, Modbus ASCII) |
-| `host`, `port` | `tcp` / `rtu_over_tcp`: bind address and TCP port (default 5020; ports below 1024 need privileges). `rtu` / `ascii`: `port` is the serial device (`COM5`, `/dev/ttyUSB0`) or a pyserial URL (`socket://host:port`, `rfc2217://...`), or `pty` (see below); `host` is ignored |
+| `type` | `tcp` (Modbus TCP, MBAP), `udp` (Modbus TCP / MBAP frames in UDP datagrams), `rtu_over_tcp` (RTU frames with CRC-16 over a TCP socket) `rtu` (serial line, RTU) or `ascii` (serial line, Modbus ASCII) |
+| `host`, `port` | `tcp` / `rtu_over_tcp`: bind address and TCP port (default 5020; ports below 1024 need privileges). `udp`: bind address and UDP port (1-65535, default 5020). `rtu` / `ascii`: `port` is the serial device (`COM5`, `/dev/ttyUSB0`) or a pyserial URL (`socket://host:port`, `rfc2217://...`), or `pty` (see below); `host` is ignored |
 | `unit_id_mode` | `strict`: only configured unit IDs answer. `any`: every unit ID is routed to `default_unit` |
 | `unknown_unit` | In `strict` mode: `ignore` (no response, like a real bus) or `exception` (gateway exception) |
-| `default_unit` | Unit ID used by `any` mode and for TCP unit IDs 0 / 255 |
+| `default_unit` | Unit ID used by `any` mode and for TCP / UDP unit IDs 0 / 255 |
 | `baudrate`, `bytesize`, `parity`, `stopbits` | `rtu` / `ascii` only. Defaults 19200 (spec default), 8 (`ascii`: 7), `E`, 1. `rtu` needs 8 data bits; `ascii` accepts 7 or 8. `parity`: `E` / `O` / `N`; with `N` the default is 2 stop bits (Serial Line V1.02). `N` + `stopbits: 1` is accepted as a common but non-conforming setting |
 | `strict_timing` | `rtu` only (default `false`). `true`: a gap longer than t1.5 inside a frame drops it and exactly t3.5 ends a frame. `false`: no t1.5 check and frames end after max(t3.5, 20 ms) of silence, because USB-serial adapters deliver bytes in bursts |
 | `char_timeout` | `ascii` only (default 1 s). An unfinished frame is dropped when no character arrives for this long |
 | `link` | `port: pty` only. Path of a symlink to the device under test's end of the pty pair (e.g. `/tmp/ttyV0`) |
+
+### Modbus UDP (`type: udp`)
+
+```yaml
+listeners:
+  - {id: u1, type: udp, host: 0.0.0.0, port: 5020}
+```
+
+- Each datagram carries exactly one Modbus TCP (MBAP) ADU; the answer is sent to the source address of the datagram with the transaction id echoed. The simulator never retransmits.
+- No Modbus specification defines Modbus over UDP; ModbusSim follows common practice (for example `modpoll -m udp` and the pymodbus UDP client).
+- A datagram shorter than 8 bytes, whose MBAP length field does not match the datagram length, or whose protocol id is not 0 is dropped (shown in the trace as dropped, with the reason); the listener keeps serving.
+- Unit routing (`unit_id_mode`, `unknown_unit`, `default_unit`, unit IDs 0 / 255) is the same as for `tcp`. Serial-only keys are rejected as for `tcp`.
+- A `udp` and a `tcp` listener may use the same `host:port`; two `udp` listeners on the same `host:port` are rejected.
+- UDP has no connections: the client count in the stats and the UI is the number of distinct source addresses seen in the last 60 s.
 
 ### Serial RTU (`type: rtu`)
 
@@ -88,7 +102,7 @@ listeners:
 
 ### Serial diagnostics (FC 07 / 08 / 0B / 0C / 11)
 
-Serial listeners (`rtu`, `ascii`) also answer the "Serial Line only" function codes. TCP and RTU over TCP answer them with exception 01.
+Serial listeners (`rtu`, `ascii`) also answer the "Serial Line only" function codes. TCP, UDP and RTU over TCP answer them with exception 01.
 
 | FC | Answer |
 |---|---|

@@ -181,6 +181,7 @@ Shell.addStrings("ja", {
   "tgt.type": "接続方式",
   "tgt.type.tcp": "Modbus TCP",
   "tgt.type.rtu_over_tcp": "RTU over TCP",
+  "tgt.type.udp": "Modbus UDP",
   "tgt.type.rtu": "シリアル（RTU）",
   "tgt.host": "ホスト",
   "tgt.port": "ポート",

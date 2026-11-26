@@ -5,7 +5,7 @@ sensors — or any register map you describe in YAML — and watch the values ch
 Modbus master (your EMS, a gateway, modpoll, pymodbus…) reads and writes them.
 
 - **Many devices, one port.** One listener serves many unit IDs; a device can be attached to several listeners.
-  Modbus TCP, Modbus RTU over TCP and serial RTU are supported side by side.
+  Modbus TCP, Modbus UDP, Modbus RTU over TCP and serial RTU are supported side by side.
 - **Own protocol core.** Function codes 01, 02, 03, 04, 05, 06, 0F, 10, 16, 17 and 2B/0E (hex) with standard exception responses; serial listeners also answer the diagnostic function codes 07, 08, 0B, 0C and 11.
 - **All the data types**, with byte order, word order, scale and offset.
 - **Realistic behavior.** Sine, random walk, expressions, ramp / follow, counters, pulses and CSV replay;

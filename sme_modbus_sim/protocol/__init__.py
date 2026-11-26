@@ -7,7 +7,7 @@ from .errors import ModbusError
 from .framer import DroppedFrame, Frame, MbapFramer, RtuFramer, crc16, crc_bytes
 from .pdu import handle_pdu
 from .serial_server import ModbusSerialServer
-from .server import ModbusTcpServer, TraceEvent
+from .server import ModbusTcpServer, ModbusUdpServer, TraceEvent
 from .store import UnitStore
 
 __all__ = [
@@ -19,6 +19,7 @@ __all__ = [
     "ModbusError",
     "ModbusSerialServer",
     "ModbusTcpServer",
+    "ModbusUdpServer",
     "RtuFramer",
     "TraceEvent",
     "UnitStore",

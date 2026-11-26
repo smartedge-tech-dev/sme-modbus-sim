@@ -35,14 +35,14 @@ so the Traffic panel marks faulted frames with a lightning sign.
 | `exception` | `code`: 01-06, 08, 0A, 0B (number or hex string, default 04) | Answer with that exception; the request is not executed |
 | `delay` | `ms`, or `min_ms` + `max_ms` (random) | Delay the response; other connections are not affected |
 | `no_response` | - | Drop the request (not executed, no answer) |
-| `disconnect` | - | TCP / RTU over TCP: close the connection after receiving the request. Serial RTU: same as `no_response` |
-| `corrupt_crc` | - | RTU / RTU over TCP / serial RTU: invert the two CRC bytes. Serial ASCII: invert the LRC. Not applied on Modbus TCP |
+| `disconnect` | - | TCP / RTU over TCP: close the connection after receiving the request. Serial RTU: same as `no_response`. UDP: no connection to close, the request stays unanswered |
+| `corrupt_crc` | - | RTU / RTU over TCP / serial RTU: invert the two CRC bytes. Serial ASCII: invert the LRC. Not applied on Modbus TCP / UDP |
 | `truncate` | `bytes` (default 3) | Send only the first N bytes of the response frame |
-| `wrong_transaction_id` | - | Modbus TCP only: answer with transaction id + 1 |
+| `wrong_transaction_id` | - | Modbus TCP / UDP only: answer with transaction id + 1 |
 | `wrong_unit_id` | `unit` (default: request unit + 1) | Answer with another unit id |
 | `busy` | `seconds` (default 10) | From the first trigger on, answer exception 06 for that many seconds, then disable the rule |
 | `freeze` | - | Point values of the matched unit (`unit` / `listener` filters) stop updating from behaviors; Modbus keeps answering and writes still work |
-| `refuse_connections` | - | Listener level (`listener` filter): new TCP connections are closed immediately |
+| `refuse_connections` | - | Listener level (`listener` filter): new TCP connections are closed immediately. On a `udp` listener every datagram is dropped while the rule is active (trace error "datagram refused (fault)") |
 
 ## Web UI
 

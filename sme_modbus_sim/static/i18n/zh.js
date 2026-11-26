@@ -181,6 +181,7 @@ Shell.addStrings("zh", {
   "tgt.type": "连接方式",
   "tgt.type.tcp": "Modbus TCP",
   "tgt.type.rtu_over_tcp": "RTU over TCP",
+  "tgt.type.udp": "Modbus UDP",
   "tgt.type.rtu": "串口（RTU）",
   "tgt.host": "主机",
   "tgt.port": "端口",

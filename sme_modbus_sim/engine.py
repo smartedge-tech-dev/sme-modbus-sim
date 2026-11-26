@@ -42,7 +42,7 @@ from .protocol import datatypes as dtypes
 from .protocol.constants import ExceptionCode
 from .protocol.errors import ModbusError
 from .protocol.serial_server import ModbusSerialServer
-from .protocol.server import ModbusTcpServer, TraceEvent
+from .protocol.server import ModbusTcpServer, ModbusUdpServer, TraceEvent
 from .protocol.store import UnitStore
 from . import templates as tpl
 from .templates import expand_device
@@ -421,7 +421,8 @@ class Engine(BaseEngine):
                     strict_timing=bool(lc.strict_timing), link=lc.link,
                     framer=lc.type, char_timeout=lc.char_timeout or 1.0)
                 continue
-            servers[lc.id] = ModbusTcpServer(
+            cls = ModbusUdpServer if lc.type == "udp" else ModbusTcpServer
+            servers[lc.id] = cls(
                 host, port, framer=lc.type, resolver=units.get, unit_id_mode=lc.unit_id_mode,
                 default_unit=lc.default_unit, trace=self._on_trace, listener_id=lc.id,
                 unknown_unit=lc.unknown_unit, all_units=lambda u=units: list(u.values()))
@@ -456,9 +457,9 @@ class Engine(BaseEngine):
     def _log_listeners(self, servers: Dict[str, Any]) -> None:
         for lid, s in servers.items():
             if s.error:
-                self.log_event("error", f"listener {lid} ({s.framer}): {s.error}")
+                self.log_event("error", f"listener {lid} ({getattr(s, 'kind', s.framer)}): {s.error}")
             else:
-                self.log_event("info", f"listener {lid} ({s.framer}) on {s.endpoint}")
+                self.log_event("info", f"listener {lid} ({getattr(s, 'kind', s.framer)}) on {s.endpoint}")
 
     async def stop(self) -> None:
         jobs = getattr(self, "scan_jobs", None)  # set by web.create_app; absent in engine-only use
@@ -485,7 +486,7 @@ class Engine(BaseEngine):
         self.stats = {lid: self.stats.get(lid, ListenerStats()) for lid in new_servers}
         for lid, s in new_servers.items():
             if s.error:
-                self.log_event("error", f"listener {lid} ({s.framer}): {s.error}")
+                self.log_event("error", f"listener {lid} ({getattr(s, 'kind', s.framer)}): {s.error}")
 
     async def _rollback(self, old_config: SimConfig, old_state: Dict[str, DeviceRuntime],
                         error: BaseException) -> None:

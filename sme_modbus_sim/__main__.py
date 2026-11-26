@@ -3,7 +3,7 @@
   sme-modbus-sim [run] [-c CONFIG] [--host 127.0.0.1] [--http-port 8081] [--no-browser]
   sme-modbus-sim validate [-c] CONFIG     (exit 0 = valid, 2 = config error)
   sme-modbus-sim templates [--templates-dir DIR]
-  sme-modbus-sim scan   (--host H [--port 502] [--transport tcp|rtu_over_tcp] | --serial COM5 [--baudrate ...])
+  sme-modbus-sim scan   (--host H [--port 502] [--transport tcp|rtu_over_tcp|udp] | --serial COM5 [--baudrate ...])
                         --unit 1 --range holding:0-99 [--range ...] [-o template.yaml] [-y]
   sme-modbus-sim record (target as for scan) --unit 1 (--template FILE_OR_NAME | -c CONFIG --device NAME)
                         [--period 1] [--duration 60] [-o out.csv] [-y]
@@ -76,7 +76,7 @@ def _target_args(ap: argparse.ArgumentParser) -> None:
     g = ap.add_argument_group("target (read-only: FC 01/02/03/04 and 2B/0E only)")
     g.add_argument("--host", help="TCP host of the device or gateway")
     g.add_argument("--port", type=int, default=502, help="TCP port (default 502)")
-    g.add_argument("--transport", choices=("tcp", "rtu_over_tcp"), default="tcp", help="TCP framing")
+    g.add_argument("--transport", choices=("tcp", "rtu_over_tcp", "udp"), default="tcp", help="network framing")
     g.add_argument("--serial", metavar="DEVICE", help="serial device or pyserial URL (RTU), e.g. COM5")
     g.add_argument("--baudrate", type=int, default=19200)
     g.add_argument("--parity", choices=("E", "N", "O"), default="E")

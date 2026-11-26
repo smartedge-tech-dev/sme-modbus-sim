@@ -183,6 +183,7 @@ Shell.addStrings("en", {
   "tgt.type": "Connection",
   "tgt.type.tcp": "Modbus TCP",
   "tgt.type.rtu_over_tcp": "RTU over TCP",
+  "tgt.type.udp": "Modbus UDP",
   "tgt.type.rtu": "Serial (RTU)",
   "tgt.host": "Host",
   "tgt.port": "Port",

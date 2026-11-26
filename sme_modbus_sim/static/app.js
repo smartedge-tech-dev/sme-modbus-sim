@@ -982,10 +982,11 @@ function fmtDur(s) {
 const fmtV = (v) => (v == null ? "" : typeof v === "number" ? String(+v.toPrecision(7)) : String(v));
 
 function targetHtml(p) {
-  // kind: "" (always shown), "net" (tcp / rtu_over_tcp) or "ser" (serial rtu); tgtSync() toggles them.
+  // kind: "" (always shown), "net" (tcp / rtu_over_tcp / udp) or "ser" (serial rtu); tgtSync() toggles them.
   const f = (kind, key, input, wide) => `<label class="ddf${wide ? " wide" : ""}"${kind ? ` data-${kind}="1"` : ""}><span>${esc(t(key))}</span>${input}</label>`;
   return f("", "tgt.type", `<select id="${p}Type"><option value="tcp">${esc(t("tgt.type.tcp"))}</option>
-      <option value="rtu_over_tcp">${esc(t("tgt.type.rtu_over_tcp"))}</option><option value="rtu">${esc(t("tgt.type.rtu"))}</option></select>`)
+      <option value="rtu_over_tcp">${esc(t("tgt.type.rtu_over_tcp"))}</option>
+      <option value="udp">${esc(t("tgt.type.udp"))}</option><option value="rtu">${esc(t("tgt.type.rtu"))}</option></select>`)
     + f("net", "tgt.host", `<input id="${p}Host" spellcheck="false" placeholder="192.168.0.10">`, true)
     + f("net", "tgt.port", `<input id="${p}Port" type="number" min="1" max="65535" value="502">`)
     + f("ser", "tgt.serial", `<input id="${p}Ser" spellcheck="false" placeholder="COM5">`, true)

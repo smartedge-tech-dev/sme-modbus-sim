@@ -117,12 +117,13 @@ def make_client(target: Dict[str, Any], timeout: float = 1.0, rate: float = 10.0
     host = str(target.get("host") or "").strip()
     if not host:
         raise ValueError(f"target type {kind} needs host")
+    proto = "UDP" if kind == "udp" else "TCP"
     try:
         port = int(target.get("port", 502))
     except (TypeError, ValueError):
-        raise ValueError("target port must be a TCP port 1..65535") from None
+        raise ValueError(f"target port must be a {proto} port 1..65535") from None
     if not 1 <= port <= 65535:
-        raise ValueError("target port must be a TCP port 1..65535")
+        raise ValueError(f"target port must be a {proto} port 1..65535")
     return ModbusClient(kind, host=host, port=port, timeout=timeout, rate=rate, **kw)
 
 

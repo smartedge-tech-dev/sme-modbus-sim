@@ -32,14 +32,14 @@
 | `exception` | `code`：01–06、08、0A、0B（数字或十六进制字符串，默认 04） | 返回该异常码，请求不执行 |
 | `delay` | `ms`，或 `min_ms` + `max_ms`（随机） | 延迟应答；不影响其它连接 |
 | `no_response` | - | 丢弃请求（不执行、不应答） |
-| `disconnect` | - | TCP / RTU over TCP：收到请求后断开连接。串口 RTU：等同 `no_response` |
-| `corrupt_crc` | - | RTU / RTU over TCP / 串口 RTU：两个 CRC 字节取反。串口 ASCII：LRC 取反。Modbus TCP 不适用 |
+| `disconnect` | - | TCP / RTU over TCP：收到请求后断开连接。串口 RTU：等同 `no_response`。UDP：没有连接可断，请求保持无应答 |
+| `corrupt_crc` | - | RTU / RTU over TCP / 串口 RTU：两个 CRC 字节取反。串口 ASCII：LRC 取反。Modbus TCP / UDP 不适用 |
 | `truncate` | `bytes`（默认 3） | 只发送应答帧的前 N 字节 |
-| `wrong_transaction_id` | - | 仅 Modbus TCP：以 transaction id + 1 应答 |
+| `wrong_transaction_id` | - | 仅 Modbus TCP / UDP：以 transaction id + 1 应答 |
 | `wrong_unit_id` | `unit`（默认：请求单元 + 1） | 以其它单元 ID 应答 |
 | `busy` | `seconds`（默认 10） | 自首次触发起在指定秒数内返回异常 06，之后规则停用 |
 | `freeze` | - | 匹配单元（`unit` / `listener` 条件）的点值不再由行为模型更新；Modbus 照常应答，写入照常生效 |
-| `refuse_connections` | - | 监听器级（`listener` 条件）：新的 TCP 连接立即关闭 |
+| `refuse_connections` | - | 监听器级（`listener` 条件）：新的 TCP 连接立即关闭。`udp` 监听器在规则生效期间丢弃每个数据报（trace 错误 "datagram refused (fault)"） |
 
 ## Web UI
 

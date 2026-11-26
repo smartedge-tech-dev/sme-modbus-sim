@@ -33,8 +33,8 @@ devices:
 | 键 | 含义 |
 |---|---|
 | `id` | 供 `devices[].listeners` 引用的名称 |
-| `type` | `tcp`（Modbus TCP，MBAP）、`rtu_over_tcp`（TCP 套接字上带 CRC-16 的 RTU 帧）`rtu`（串口，RTU）或 `ascii`（串口，Modbus ASCII） |
-| `host`, `port` | `tcp` / `rtu_over_tcp`：绑定地址与 TCP 端口（默认 5020；1024 以下需要权限）。`rtu` / `ascii`：`port` 为串口设备（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）或 `pty`（见下文），`host` 被忽略 |
+| `type` | `tcp`（Modbus TCP，MBAP）、`udp`（UDP 数据报中的 Modbus TCP / MBAP 帧）、`rtu_over_tcp`（TCP 套接字上带 CRC-16 的 RTU 帧）`rtu`（串口，RTU）或 `ascii`（串口，Modbus ASCII） |
+| `host`, `port` | `tcp` / `rtu_over_tcp`：绑定地址与 TCP 端口（默认 5020；1024 以下需要权限）。`udp`：绑定地址与 UDP 端口（1-65535，默认 5020）。`rtu` / `ascii`：`port` 为串口设备（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）或 `pty`（见下文），`host` 被忽略 |
 | `unit_id_mode` | `strict`：只响应已配置的站号。`any`：所有站号都路由到 `default_unit` |
 | `unknown_unit` | `strict` 模式下：`ignore`（与真实总线一样不响应）或 `exception`（网关异常） |
 | `default_unit` | `any` 模式以及 TCP 站号 0 / 255 使用的站号 |
@@ -42,6 +42,20 @@ devices:
 | `strict_timing` | 仅 `rtu`（默认 `false`）。`true`：帧内字符间隔超过 t1.5 即丢弃该帧，静默恰好 t3.5 即帧结束。`false`：不检查 t1.5，静默 max(t3.5, 20 ms) 视为帧结束（USB 转串口适配器会成批送出字节） |
 | `char_timeout` | 仅 `ascii`（默认 1 s）。超过这么久没有新字符，就丢弃未完成的帧 |
 | `link` | 仅 `port: pty`。指向 pty 对中被测设备那一端的符号链接路径（例如 `/tmp/ttyV0`） |
+
+### Modbus UDP（`type: udp`）
+
+```yaml
+listeners:
+  - {id: u1, type: udp, host: 0.0.0.0, port: 5020}
+```
+
+- 每个数据报恰好承载一个 Modbus TCP（MBAP）ADU；应答发往该数据报的源地址，transaction id 原样返回。模拟器不会重发。
+- Modbus 规格没有定义 Modbus over UDP；ModbusSim 遵循通行做法（例如 `modpoll -m udp` 和 pymodbus 的 UDP 客户端）。
+- 短于 8 字节、MBAP 长度字段与数据报长度不符、或 protocol id 不为 0 的数据报会被丢弃（trace 中显示为已丢弃及原因）；监听器继续服务。
+- 单元路由（`unit_id_mode`、`unknown_unit`、`default_unit`、单元 ID 0 / 255）与 `tcp` 相同。串口专用的键与 `tcp` 一样会被拒绝。
+- `udp` 与 `tcp` 监听器可以使用相同的 `host:port`；同一 `host:port` 上的两个 `udp` 监听器会被拒绝。
+- UDP 没有连接：统计和 UI 中的客户端数是最近 60 s 内出现过的不同源地址数。
 
 ### 串口 RTU（`type: rtu`）
 
@@ -88,7 +102,7 @@ listeners:
 
 ### 串口诊断（FC 07 / 08 / 0B / 0C / 11）
 
-串口监听器（`rtu`、`ascii`）还支持规格中标为「Serial Line only」的功能码；TCP 和 RTU over TCP 对它们返回异常 01。
+串口监听器（`rtu`、`ascii`）还支持规格中标为「Serial Line only」的功能码；TCP、UDP 和 RTU over TCP 对它们返回异常 01。
 
 | FC | 应答 |
 |---|---|

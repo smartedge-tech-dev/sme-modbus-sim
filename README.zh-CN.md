@@ -4,7 +4,7 @@
 
 一个带实时 Web UI 的 Modbus TCP / RTU 设备模拟器。可以模拟储能 PCS、BMS、电能表、环境传感器，或任何用 YAML 描述的寄存器表，并在浏览器中观察数值变化，同时由真实的 Modbus 主站（你的 EMS、网关、modpoll、pymodbus……）读写这些设备。
 
-- **一个端口承载多台设备。** 一个监听器可服务多个站号（unit ID），一台设备也可以挂在多个监听器上。Modbus TCP、Modbus RTU over TCP（用于串口网关）、串口 RTU 与串口 ASCII（COM 口 / tty）可同时使用。
+- **一个端口承载多台设备。** 一个监听器可服务多个站号（unit ID），一台设备也可以挂在多个监听器上。Modbus TCP、Modbus UDP、Modbus RTU over TCP（用于串口网关）、串口 RTU 与串口 ASCII（COM 口 / tty）可同时使用。
 - **自研协议核心。** 支持功能码 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E（十六进制），并返回标准异常响应；串口监听器另外支持诊断功能码 07 / 08 / 0B / 0C / 11。帧格式与 Modbus TCP / RTU 兼容（MBAP、CRC-16）。
 - **数据类型齐全。** `bool`、`int16` / `uint16`、`int32` / `uint32`、`int64` / `uint64`、`float32` / `float64`、`string`、`enum`、寄存器内位，可配置字节序、字序（ABCD / CDAB / BADC / DCBA）、比例系数和偏移。
 - **行为逼真。** PCS 按斜率追随功率设定值，BMS 根据 PCS 功率积分 SOC，电能表显示站内负荷减去 PCS 功率。支持正弦、随机游走、表达式、计数器、脉冲和 CSV 回放。

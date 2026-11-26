@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Modbus UDP listener (`type: udp`): one MBAP ADU per datagram, answered to the sender; unit routing and fault injection as on TCP. The read-only scan / record client also speaks UDP (`--transport udp`, Web UI).
+
 ## [0.2.0] - 2026-11-26
 
 ### Added

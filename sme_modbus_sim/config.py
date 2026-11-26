@@ -56,7 +56,8 @@ class SimulationConfig(_Model):
 class ListenerConfig(_Model):
     """A Modbus server endpoint. One listener serves many unit ids (design §12 Q4).
 
-    ``tcp`` / ``rtu_over_tcp``: ``host`` + TCP ``port`` (int).
+    ``tcp`` / ``rtu_over_tcp``: ``host`` + TCP ``port`` (int). ``udp``: ``host`` + UDP ``port``, one MBAP ADU
+    per datagram.
     ``rtu`` (serial line): ``port`` is a device name or pyserial URL (``COM5``, ``/dev/ttyUSB0``,
     ``socket://host:port``, ``rfc2217://...``); ``baudrate`` / ``bytesize`` / ``parity`` / ``stopbits`` /
     ``strict_timing`` apply only to it. Defaults follow Modbus over Serial Line V1.02: 8 data bits,
@@ -69,7 +70,7 @@ class ListenerConfig(_Model):
     """
 
     id: str = Field(min_length=1)
-    type: Literal["tcp", "rtu_over_tcp", "rtu", "ascii"] = "tcp"
+    type: Literal["tcp", "rtu_over_tcp", "udp", "rtu", "ascii"] = "tcp"
     host: str = "0.0.0.0"
     port: Union[int, str] = 5020
     unit_id_mode: Literal["strict", "any"] = "strict"
@@ -100,7 +101,7 @@ class ListenerConfig(_Model):
                 return PTY_PORT
             return v
         if isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 65535:
-            raise ValueError(f"port must be a TCP port 1..65535 for type {kind}")
+            raise ValueError(f"port must be a {'UDP' if kind == 'udp' else 'TCP'} port 1..65535 for type {kind}")
         return v
 
     @model_validator(mode="after")
@@ -340,8 +341,8 @@ class SimConfig(_Model):
         dup = sorted({i for i in ids if ids.count(i) > 1})
         if dup:
             raise ValueError(f"duplicate listener id: {dup}")
-        eps = [(l.host, l.port) for l in self.listeners if l.type not in SERIAL_TYPES]
-        dup_ep = sorted({f"{h}:{p}" for h, p in eps if eps.count((h, p)) > 1})
+        eps = [(l.host, l.port, l.type == "udp") for l in self.listeners if l.type not in SERIAL_TYPES]
+        dup_ep = sorted({f"{h}:{p}" + ("/udp" if u else "") for h, p, u in eps if eps.count((h, p, u)) > 1})
         if dup_ep:
             raise ValueError(f"listeners share the same host:port: {dup_ep}")
         ports = [str(l.port) for l in self.listeners if l.type in SERIAL_TYPES and l.port != PTY_PORT]

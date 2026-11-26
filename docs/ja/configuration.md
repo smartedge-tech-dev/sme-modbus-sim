@@ -33,8 +33,8 @@ devices:
 | キー | 内容 |
 |---|---|
 | `id` | `devices[].listeners` から参照する名前 |
-| `type` | `tcp`（Modbus TCP、MBAP）、`rtu_over_tcp`（TCP ソケット上の CRC-16 付き RTU フレーム）`rtu`（シリアル回線、RTU）または `ascii`（シリアル回線、Modbus ASCII） |
-| `host`, `port` | `tcp` / `rtu_over_tcp`: バインドアドレスと TCP ポート（既定 5020。1024 未満は権限が必要）。`rtu` / `ascii`: `port` はシリアルデバイス（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）、または `pty`（後述）。`host` は無視 |
+| `type` | `tcp`（Modbus TCP、MBAP）、`udp`（UDP データグラム内の Modbus TCP / MBAP フレーム）、`rtu_over_tcp`（TCP ソケット上の CRC-16 付き RTU フレーム）`rtu`（シリアル回線、RTU）または `ascii`（シリアル回線、Modbus ASCII） |
+| `host`, `port` | `tcp` / `rtu_over_tcp`: バインドアドレスと TCP ポート（既定 5020。1024 未満は権限が必要）。`udp`: バインドアドレスと UDP ポート（1-65535、既定 5020）。`rtu` / `ascii`: `port` はシリアルデバイス（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）、または `pty`（後述）。`host` は無視 |
 | `unit_id_mode` | `strict`: 設定済みのユニット ID のみ応答。`any`: すべてのユニット ID を `default_unit` に振り向ける |
 | `unknown_unit` | `strict` 時の動作。`ignore`（実際のバスと同様に無応答）または `exception`（ゲートウェイ例外） |
 | `default_unit` | `any` モード、および TCP のユニット ID 0 / 255 で使うユニット ID |
@@ -42,6 +42,20 @@ devices:
 | `strict_timing` | `rtu` のみ（既定 `false`）。`true`: フレーム内で t1.5 を超える間隔があれば破棄し、t3.5 ちょうどでフレーム終端とする。`false`: t1.5 を検査せず、max(t3.5, 20 ms) の無信号でフレーム終端（USB シリアル変換器はバイトをまとめて渡すため） |
 | `char_timeout` | `ascii` のみ（既定 1 s）。この時間文字が届かなければ未完のフレームを破棄する |
 | `link` | `port: pty` のみ。pty ペアのうち被試験機側の端を指すシンボリックリンクのパス（例 `/tmp/ttyV0`） |
+
+### Modbus UDP（`type: udp`）
+
+```yaml
+listeners:
+  - {id: u1, type: udp, host: 0.0.0.0, port: 5020}
+```
+
+- 1 データグラムにちょうど 1 つの Modbus TCP（MBAP）ADU を載せる。応答はデータグラムの送信元アドレスへ返し、トランザクション ID はそのまま返す。シミュレーターは再送しない。
+- Modbus over UDP を定める Modbus 仕様はない。ModbusSim は一般的な慣行（例: `modpoll -m udp`、pymodbus の UDP クライアント）に従う。
+- 8 バイト未満、MBAP の長さフィールドがデータグラム長と一致しない、またはプロトコル ID が 0 でないデータグラムは破棄する（トレースには破棄と理由を表示）。リスナーは動作を続ける。
+- ユニットのルーティング（`unit_id_mode`、`unknown_unit`、`default_unit`、ユニット ID 0 / 255）は `tcp` と同じ。シリアル専用のキーは `tcp` と同様に拒否する。
+- `udp` と `tcp` のリスナーは同じ `host:port` を使える。同じ `host:port` の `udp` リスナー 2 つは拒否する。
+- UDP には接続がない。統計と UI のクライアント数は、直近 60 s に見えた送信元アドレスの種類の数。
 
 ### シリアル RTU（`type: rtu`）
 
@@ -88,7 +102,7 @@ listeners:
 
 ### シリアル診断（FC 07 / 08 / 0B / 0C / 11）
 
-シリアルリスナー（`rtu`、`ascii`）は、仕様で「Serial Line only」とされるファンクションコードにも応答する。TCP と RTU over TCP はこれらに例外 01 を返す。
+シリアルリスナー（`rtu`、`ascii`）は、仕様で「Serial Line only」とされるファンクションコードにも応答する。TCP、UDP、RTU over TCP はこれらに例外 01 を返す。
 
 | FC | 応答 |
 |---|---|

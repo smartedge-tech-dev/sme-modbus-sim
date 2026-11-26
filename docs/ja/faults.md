@@ -33,14 +33,14 @@ Web UI（下部ペインの **故障注入** タブ）または REST API で管�
 | `exception` | `code`: 01〜06, 08, 0A, 0B（数値または16進文字列、既定 04） | その例外を返す。要求は実行しない |
 | `delay` | `ms`、または `min_ms` + `max_ms`（ランダム） | 応答を遅らせる。他の接続には影響しない |
 | `no_response` | - | 要求を捨てる（実行も応答もしない） |
-| `disconnect` | - | TCP / RTU over TCP：要求受信後に接続を切断。シリアル RTU では `no_response` と同じ |
-| `corrupt_crc` | - | RTU / RTU over TCP / シリアル RTU：CRC 2 バイトを反転。シリアル ASCII：LRC を反転。Modbus TCP には適用しない |
+| `disconnect` | - | TCP / RTU over TCP：要求受信後に接続を切断。シリアル RTU では `no_response` と同じ。UDP: 閉じる接続がなく、要求は無応答のまま |
+| `corrupt_crc` | - | RTU / RTU over TCP / シリアル RTU：CRC 2 バイトを反転。シリアル ASCII：LRC を反転。Modbus TCP / UDP には適用しない |
 | `truncate` | `bytes`（既定 3） | 応答フレームの先頭 N バイトだけ送る |
-| `wrong_transaction_id` | - | Modbus TCP のみ：トランザクション ID + 1 で応答 |
+| `wrong_transaction_id` | - | Modbus TCP / UDP のみ：トランザクション ID + 1 で応答 |
 | `wrong_unit_id` | `unit`（既定：要求のユニット + 1） | 別のユニット ID で応答 |
 | `busy` | `seconds`（既定 10） | 初回発動から指定秒数、例外 06 を返し、その後ルールを無効にする |
 | `freeze` | - | 一致したユニット（`unit` / `listener` 条件）の値をビヘイビアで更新しない。Modbus 応答と書込みは継続 |
-| `refuse_connections` | - | リスナー単位（`listener` 条件）：新しい TCP 接続を即座に閉じる |
+| `refuse_connections` | - | リスナー単位（`listener` 条件）：新しい TCP 接続を即座に閉じる。`udp` リスナーでは、ルールが有効な間はすべてのデータグラムを破棄する（トレースのエラー "datagram refused (fault)"） |
 
 ## Web UI
 

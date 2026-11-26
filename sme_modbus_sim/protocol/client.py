@@ -7,6 +7,7 @@ before anything reaches the wire.
 Transports (field names follow ``ListenerConfig``):
   * ``tcp``           Modbus TCP (MBAP), transaction ids checked
   * ``rtu_over_tcp``  raw RTU frames (CRC) over a TCP stream
+  * ``udp``           one MBAP ADU per UDP datagram, transaction ids checked
   * ``rtu``           serial line via pyserial; blocking I/O runs in a worker thread (like ``serial_server``)
 
 Every request has a timeout and goes through a rate limiter (requests per second). Exception responses
@@ -16,6 +17,7 @@ wrong unit / function code, bad length) raise ``BadResponse``.
 from __future__ import annotations
 
 import asyncio
+import socket
 import struct
 import time
 from typing import Any, Callable, Dict, List, Optional
@@ -25,7 +27,7 @@ from .errors import ModbusError
 from .framer import MbapFramer, RtuFramer, crc16
 
 READ_ONLY_FUNCTION_CODES = frozenset({0x01, 0x02, 0x03, 0x04, 0x2B})
-TRANSPORTS = ("tcp", "rtu_over_tcp", "rtu")
+TRANSPORTS = ("tcp", "rtu_over_tcp", "udp", "rtu")
 TABLE_FC = {"coil": 0x01, "discrete": 0x02, "holding": 0x03, "input": 0x04}
 
 # Read Device Identification object ids (Application Protocol V1.1b3 table 6.21)
@@ -110,6 +112,7 @@ class ModbusClient:
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
         self._serial: Any = None
+        self._udp: Any = None  # connected non-blocking UDP socket
         self._dirty = False
         self._lock = asyncio.Lock()
 
@@ -131,6 +134,22 @@ class ModbusClient:
                 factory, self.port, baudrate=self.baudrate, bytesize=self.bytesize, parity=self.parity,
                 stopbits=self.stopbits, timeout=0.02)
             return
+        if self.transport == "udp":
+            try:
+                infos = await asyncio.get_running_loop().getaddrinfo(self.host, int(self.port),
+                                                                     type=socket.SOCK_DGRAM)
+                fam, _, proto, _, addr = infos[0]
+                sock = socket.socket(fam, socket.SOCK_DGRAM, proto)
+                sock.setblocking(False)
+                try:
+                    sock.connect(addr)
+                except OSError:
+                    sock.close()
+                    raise
+                self._udp = sock
+            except OSError as e:
+                raise ClientError(f"cannot reach {self.host}:{self.port}: {e.strerror or e}") from None
+            return
         try:
             self._reader, self._writer = await asyncio.wait_for(
                 asyncio.open_connection(self.host, int(self.port)), self.timeout)
@@ -147,6 +166,9 @@ class ModbusClient:
             except (OSError, ConnectionError):
                 pass
             self._writer = self._reader = None
+        if self._udp is not None:
+            self._udp.close()
+            self._udp = None
         if self._serial is not None:
             s, self._serial = self._serial, None
             await asyncio.to_thread(s.close)
@@ -233,6 +255,8 @@ class ModbusClient:
                 resp = await self._tcp_exchange(unit, pdu)
             elif self.transport == "rtu_over_tcp":
                 resp = await self._rtu_tcp_exchange(unit, pdu)
+            elif self.transport == "udp":
+                resp = await self._udp_exchange(unit, pdu)
             else:
                 resp = await asyncio.to_thread(self._serial_exchange, unit, pdu)
         return _check_response(fc, resp)
@@ -267,6 +291,46 @@ class ModbusClient:
                 if runit != unit:
                     raise BadResponse(f"unit id {runit} in response to unit {unit}")
                 return body
+
+    async def _udp_exchange(self, unit: int, pdu: bytes) -> bytes:
+        if self._udp is None:
+            raise ClientError("not connected")
+        sock, loop = self._udp, asyncio.get_running_loop()
+        while True:  # late answers to earlier (timed out) requests
+            try:
+                sock.recv(65535)
+            except (BlockingIOError, InterruptedError):
+                break
+            except OSError:  # e.g. Windows ConnectionResetError from an earlier ICMP port unreachable
+                continue
+        self._tid = (self._tid + 1) & 0xFFFF
+        tid = self._tid
+        try:
+            sock.send(MbapFramer.build(tid, unit, pdu))
+        except OSError as e:
+            raise ClientError(f"cannot send to {self.host}:{self.port}: {e.strerror or e}") from None
+        deadline = time.monotonic() + self.timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ResponseTimeout(f"no response within {self.timeout:g} s")
+            try:
+                data = await asyncio.wait_for(loop.sock_recv(sock, 65535), remaining)
+            except asyncio.TimeoutError:
+                raise ResponseTimeout(f"no response within {self.timeout:g} s") from None
+            except (ConnectionResetError, ConnectionRefusedError):
+                # ICMP port unreachable: nothing listens there (yet); wait out the timeout like a master
+                await asyncio.sleep(min(0.05, max(remaining, 0)))
+                continue
+            if len(data) < 8:
+                raise BadResponse(f"datagram too short for MBAP ({len(data)} bytes)")
+            rtid, pid, length, runit = struct.unpack(">HHHB", data[:7])
+            if pid != 0 or 6 + length != len(data):
+                raise BadResponse(f"invalid MBAP header (protocol {pid}, length {length}, datagram {len(data)} bytes)")
+            if rtid == tid:
+                if runit != unit:
+                    raise BadResponse(f"unit id {runit} in response to unit {unit}")
+                return data[7:]
 
     async def _drain(self, reader: asyncio.StreamReader) -> None:
         while True:
