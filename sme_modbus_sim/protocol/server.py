@@ -30,6 +30,7 @@ import asyncio
 import contextlib
 import socket
 import ssl
+import sys
 import time
 from dataclasses import dataclass
 from typing import Callable, Iterable
@@ -327,6 +328,26 @@ class _DatagramWriter:
         return None
 
 
+SIO_UDP_CONNRESET = 0x9800000C
+
+
+def _disable_udp_connreset(sock: socket.socket) -> None:
+    """Windows: stop reporting an ICMP port unreachable (an answer to a departed client) as an error on
+    the next receive; on some Windows versions the socket then stops delivering datagrams to the
+    asyncio proactor. ``socket.ioctl`` does not accept this code, so call WSAIoctl directly."""
+    import ctypes
+    from ctypes import wintypes
+
+    ws2 = ctypes.WinDLL("ws2_32")
+    fn = ws2.WSAIoctl
+    fn.argtypes = [ctypes.c_size_t, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p,
+                   wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p, ctypes.c_void_p]
+    fn.restype = ctypes.c_int
+    flag, returned = wintypes.BOOL(False), wintypes.DWORD(0)
+    fn(sock.fileno(), SIO_UDP_CONNRESET, ctypes.byref(flag), ctypes.sizeof(flag), None, 0,
+       ctypes.byref(returned), None, None)  # best effort: the receive loop also skips reset errors
+
+
 def udp_socket(host: str, port: int) -> socket.socket:
     """Non-blocking UDP socket bound to ``host:port``."""
     infos = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_DGRAM, 0, socket.AI_PASSIVE)
@@ -337,6 +358,8 @@ def udp_socket(host: str, port: int) -> socket.socket:
     try:
         sock.bind(addr)
         sock.setblocking(False)
+        if sys.platform == "win32":
+            _disable_udp_connreset(sock)
     except BaseException:
         sock.close()
         raise
