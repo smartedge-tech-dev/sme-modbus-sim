@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-26
+
 ### Added
 
 - Serial diagnostic function codes on `rtu` and `ascii` listeners: 07 Read Exception Status, 08 Diagnostics (sub-functions 00-04, 0A-12, 14, including Listen Only Mode and the ASCII input delimiter), 0B Get Comm Event Counter, 0C Get Comm Event Log and 11 Report Server ID. Bus counters are kept per listener, server counters, event counter and event log per device; fault injection exceptions are counted. TCP and RTU over TCP answer these function codes with exception 01. The interpretations of points the specifications leave open are listed in the configuration documentation.

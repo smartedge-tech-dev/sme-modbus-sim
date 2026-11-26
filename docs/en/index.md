@@ -20,7 +20,8 @@ meter / DER / battery templates ([templates](behaviors-templates.md)), and [devi
 Not affiliated with, endorsed by, or certified by SunSpec Alliance; the SunSpec templates are generated from the public
 SunSpec model definitions (Apache-2.0).
 
+Released in 0.2.0: serial Modbus ASCII; built-in pty pair for serial testing without drivers (Linux / macOS / WSL2); serial diagnostic function codes 07 / 08 / 0B / 0C / 11.
+
 Planned:
 
-- 0.2.0 (serial line): built-in pty pair for serial testing without drivers (Linux / macOS / WSL2), serial diagnostic function codes (07 / 08 / 0B / 0C / 11), Modbus ASCII.
 - 0.3.0 (network): Modbus UDP, Modbus/TCP Security (TLS).

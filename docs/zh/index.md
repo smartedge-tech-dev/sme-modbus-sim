@@ -18,7 +18,8 @@ SME ModbusSim 免费且采用 MIT 许可，由 [smart-edge（智届科技）](ht
 （[模板](behaviors-templates.md)），UI 中的[设备管理](device-management.md)，以及真实设备的只读扫描 / 录制（[快速入门](quick-start.md)）。
 与 SunSpec Alliance 无任何关联，未获其认可或认证；SunSpec 模板由公开的 SunSpec 模型定义（Apache-2.0）生成。
 
+已在 0.2.0 中发布：串口 Modbus ASCII；内置 pty 虚拟串口对，免驱动做串口联调（Linux / macOS / WSL2）；串口诊断功能码 07 / 08 / 0B / 0C / 11。
+
 计划：
 
-- 0.2.0（串口线路）：内置 pty 虚拟串口对，免驱动做串口联调（Linux / macOS / WSL2）；串口诊断功能码（07 / 08 / 0B / 0C / 11）；Modbus ASCII。
 - 0.3.0（网络）：Modbus UDP；Modbus/TCP Security（TLS）。

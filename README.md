@@ -112,9 +112,10 @@ Released in 0.1.0: Modbus TCP, RTU over TCP and serial RTU; function codes
 import / export; user-local templates and "save device as template"; generic templates and SunSpec PV inverter /
 meter / DER (701-705) / battery (802, 803) templates; read-only scan / record of real devices; web UI with device management and a template browser; Windows exe, multi-arch Docker, offline archives.
 
+Released in 0.2.0: serial Modbus ASCII; built-in pty pair for serial testing without drivers (Linux / macOS / WSL2); serial diagnostic function codes 07 / 08 / 0B / 0C / 11.
+
 Planned:
 
-- 0.2.0 (serial line): built-in pty pair for serial testing without drivers (Linux / macOS / WSL2), serial diagnostic function codes (07 / 08 / 0B / 0C / 11), Modbus ASCII.
 - 0.3.0 (network): Modbus UDP, Modbus/TCP Security (TLS).
 
 > Not affiliated with, endorsed by, or certified by SunSpec Alliance. The `sunspec_pv_inverter` (models 1, 103, 120-123, 160) and `sunspec_meter` (models 1, 203), `sunspec_der` (models 1, 701-705) and `sunspec_battery` (models 1, 802, 803) templates are generated from the public SunSpec model definitions (Apache-2.0) and implement SunSpec Modbus models. No vendor register maps are built in; import your own privately via Excel or user-local templates.
