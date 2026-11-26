@@ -23,6 +23,9 @@ no silence detection; an unfinished frame is dropped when no character arrives f
 Addressing (SER section 2.2): 1..247 individual, 0 broadcast (write FCs executed on every
 unit of the listener, never answered), 248..255 reserved and ignored.
 
+Diagnostics (FC 07 / 08 / 0B / 0C / 11, Serial Line only): see ``diagnostics.py``. Counters
+start at 0 when the listener starts.
+
 Fault injection: as in ``server.py``; ``disconnect`` is treated as no response (a serial line has
 no connection), ``delay`` queues the response with ``call_later`` so the reader keeps running.
 """
@@ -35,7 +38,18 @@ import threading
 import time
 from typing import Callable, Iterable
 
-from .framer import AsciiFramer, DroppedFrame, Frame, RtuFramer
+from .constants import ExceptionCode
+from .diagnostics import (
+    DIAGNOSTIC_FUNCTION_CODES,
+    EVENT_ENTERED_LISTEN_ONLY,
+    EVENT_RESTART,
+    BusCounters,
+    DiagResult,
+    UnitDiagnostics,
+    handle_diagnostic,
+    inc,
+)
+from .framer import ASCII_LF, AsciiFramer, DroppedFrame, Frame, RtuFramer
 from .pty_port import PTY_PORT, PtyPort
 from .pdu import describe_request, describe_response, exception_response, handle_pdu, is_write
 from .server import UNIT_ID_MODES, PduHandler, Resolver, TraceEvent, encode_response
@@ -129,6 +143,9 @@ class ModbusSerialServer:
         self._stop = threading.Event()
         self._tx: queue.SimpleQueue[bytes] = queue.SimpleQueue()
         self._loop: asyncio.AbstractEventLoop | None = None
+        self.bus = BusCounters()  # shared by all units of this listener
+        self._diag: dict[int, UnitDiagnostics] = {}
+        self.delimiter = ASCII_LF  # ASCII request end delimiter (FC 08/03)
 
     # ------------------------------------------------------------ properties
     @property
@@ -229,6 +246,8 @@ class ModbusSerialServer:
                     self._loop.call_soon_threadsafe(self._fail, f"serial port {self.port!r}: {e}")
                 return
             now = time.perf_counter()
+            if self.framer == "ascii":
+                framer.delimiter = self.delimiter
             if data:
                 if framer.has_partial:
                     gap = now - last
@@ -258,46 +277,111 @@ class ModbusSerialServer:
         with contextlib.suppress(Exception):
             self.trace(ev)
 
-    def process_frame(self, frame: Frame) -> bytes | None:
-        """Return the response PDU for ``frame`` or None when no response is sent."""
-        pdu = frame.pdu
-        if not pdu:
-            return None
-        uid = frame.unit_id
-        if uid == 0:
-            if is_write(pdu[0]) and self.all_units is not None:
-                for store in self.all_units():
-                    self.pdu_handler(store, pdu)
-            return None
-        if uid > SERIAL_MAX_UNIT:
-            return None
-        store = self.resolver(self.default_unit if self.unit_id_mode == "any" else uid)
-        return None if store is None else self.pdu_handler(store, pdu)
+    def unit_diagnostics(self, unit_id: int) -> UnitDiagnostics:
+        """Server-level diagnostic counters / event log of one unit on this listener."""
+        diag = self._diag.get(unit_id)
+        if diag is None:
+            diag = self._diag[unit_id] = UnitDiagnostics()
+        return diag
+
+    def _execute(self, store: UnitStore, diag: UnitDiagnostics, pdu: bytes) -> tuple[bytes | None, DiagResult | None]:
+        if pdu[0] in DIAGNOSTIC_FUNCTION_CODES:
+            r = handle_diagnostic(pdu, diag, self.bus, store.identification)
+            return r.response, r
+        return self.pdu_handler(store, pdu), None
+
+    def _apply(self, diag: UnitDiagnostics, pdu: bytes, r: DiagResult | None) -> None:
+        """Side effects of a diagnostic request, applied after the request has been counted."""
+        if r is None or (r.response is not None and r.response[0] & 0x80):
+            return
+        if r.restart:
+            if r.clear_log:
+                diag.events.clear()
+            diag.listen_only = False
+            diag.log(EVENT_RESTART)
+            self.delimiter = ASCII_LF
+        if r.clear_counters:
+            diag.clear_counters()
+            self.bus.clear()
+        if r.delimiter is not None and self.framer == "ascii":
+            self.delimiter = r.delimiter
+        if r.listen_only:
+            diag.listen_only = True
+            diag.log(EVENT_ENTERED_LISTEN_ONLY)
+
+    def _broadcast(self, pdu: bytes) -> None:
+        """Unit 0: write FCs are executed on every unit, never answered (SER 2.2). Other FCs are
+        not allowed in a broadcast: not executed, counted as an exception error (CPT3)."""
+        if self.all_units is None:
+            return
+        for store in self.all_units():
+            diag = self.unit_diagnostics(store.unit_id)
+            diag.server_message = inc(diag.server_message)
+            diag.no_response = inc(diag.no_response)
+            diag.receive_event(broadcast=True)
+            if diag.listen_only:
+                diag.account(pdu[0], None, broadcast=True, completed=False)
+                continue
+            if is_write(pdu[0]):
+                resp = self.pdu_handler(store, pdu)
+            else:
+                resp = exception_response(pdu[0], ExceptionCode.ILLEGAL_FUNCTION)
+            diag.account(pdu[0], resp, broadcast=True)
 
     def _deliver(self, items: list[Frame | DroppedFrame]) -> None:
         for item in items:
             if isinstance(item, DroppedFrame):
+                self.bus.bus_comm_error = inc(self.bus.bus_comm_error)
                 self._emit("rx", item.raw, None, None, "dropped", error=item.reason)
                 continue
-            fc = item.pdu[0] if item.pdu else None
+            self.bus.bus_message = inc(self.bus.bus_message)
+            pdu, uid = item.pdu, item.unit_id
+            fc = pdu[0] if pdu else None
+            if not pdu or uid > SERIAL_MAX_UNIT:
+                self._emit("rx", item.raw, uid, fc, describe_request(pdu))
+                continue
+            if uid == 0:
+                self._emit("rx", item.raw, uid, fc, describe_request(pdu))
+                self._broadcast(pdu)
+                continue
+            store = self.resolver(self.default_unit if self.unit_id_mode == "any" else uid)
+            if store is None:  # another device on the line: only the bus message counter
+                self._emit("rx", item.raw, uid, fc, describe_request(pdu))
+                continue
+            diag = self.unit_diagnostics(store.unit_id)
+            diag.server_message = inc(diag.server_message)
+            diag.receive_event(broadcast=False)
+            if diag.listen_only:
+                # monitored, not acted upon; only 08/01 Restart is executed (and not answered)
+                self._emit("rx", item.raw, uid, fc, describe_request(pdu) + " (listen only)")
+                if fc == 0x08 and pdu[1:3] == b"\x00\x01":
+                    _resp, r = self._execute(store, diag, pdu)
+                    diag.account(fc, None)
+                    self._apply(diag, pdu, r)
+                else:
+                    diag.account(fc, None, completed=False)
+                continue
             hit = None
-            if self.faults is not None and item.pdu and 0 < item.unit_id <= SERIAL_MAX_UNIT:
-                hit = self.faults.evaluate(self.listener_id, self.framer, item.unit_id, item.pdu)
-            self._emit("rx", item.raw, item.unit_id, fc, describe_request(item.pdu),
-                       fault=hit.info if hit is not None else None)
+            if self.faults is not None:
+                hit = self.faults.evaluate(self.listener_id, self.framer, uid, pdu)
+            self._emit("rx", item.raw, uid, fc, describe_request(pdu), fault=hit.info if hit is not None else None)
+            r = None
             if hit is not None and hit.action in ("no_response", "disconnect"):
+                diag.account(fc, None, completed=False)
                 continue
             if hit is not None and hit.code is not None:
                 resp = exception_response(fc, hit.code)
             else:
-                resp = self.process_frame(item)
+                resp, r = self._execute(store, diag, pdu)
+            diag.account(fc, resp)
+            self._apply(diag, pdu, r)
             if resp is None or self._serial is None:
                 continue
-            raw = encode_response(self.framer, 0, item.unit_id, resp, hit)
+            raw = encode_response(self.framer, 0, uid, resp, hit)
             if hit is not None and hit.delay and self._loop is not None:
-                self._loop.call_later(hit.delay, self._send, raw, item.unit_id, resp, hit)
+                self._loop.call_later(hit.delay, self._send, raw, uid, resp, hit)
             else:
-                self._send(raw, item.unit_id, resp, hit)
+                self._send(raw, uid, resp, hit)
 
     def _send(self, raw: bytes, unit_id: int, resp: bytes, hit=None) -> None:
         if self._serial is None:

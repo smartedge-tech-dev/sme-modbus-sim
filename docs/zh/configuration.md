@@ -84,7 +84,34 @@ listeners:
 
 ### 功能码
 
-01、02、03、04、05、06、0F、10、16（Mask Write Register）、17（Read/Write Multiple registers，先写后读）以及 2B / 0E（Read Device Identification：读取码 01 basic、02 regular、03 extended 流式读取，04 单个对象；过长的应答用 More Follows 分段）。经 16 / 17 的写入与 06 / 10 适用相同检查（只读点、多寄存器值部分写入、min / max）。其他功能码返回异常 01。
+01、02、03、04、05、06、0F、10、16（Mask Write Register）、17（Read/Write Multiple registers，先写后读）以及 2B / 0E（Read Device Identification：读取码 01 basic、02 regular、03 extended 流式读取，04 单个对象；过长的应答用 More Follows 分段）。串口监听器另外支持 07、08、0B、0C、11（见下文）。经 16 / 17 的写入与 06 / 10 适用相同检查（只读点、多寄存器值部分写入、min / max）。其他功能码返回异常 01。
+
+### 串口诊断（FC 07 / 08 / 0B / 0C / 11）
+
+串口监听器（`rtu`、`ascii`）还支持规格中标为「Serial Line only」的功能码；TCP 和 RTU over TCP 对它们返回异常 01。
+
+| FC | 应答 |
+|---|---|
+| 07 Read Exception Status | `00` |
+| 08 Diagnostics | 子功能 00 回显（data 长度不限）、01 重启通信（data `0000` 保留事件日志，`FF00` 清空）、02 诊断寄存器（恒为 0）、03 更改 ASCII 输入分隔符、04 进入 Listen Only Mode（不应答）、0A 清零计数器、0B-12 各计数器、14 清零溢出计数器 |
+| 0B Get Comm Event Counter | status `0000`（从不 busy）和事件计数 |
+| 0C Get Comm Event Log | status、事件计数、总线消息数，以及最多 64 个事件字节（最新的在前） |
+| 11 Report Server ID | 以设备的 `identification.product_code` 作为 Server ID，run indicator `FF`，无附加数据 |
+
+计数器为 16 位，溢出后回绕，监听器启动时从 0 开始。
+
+- 按监听器（即这条线路）：总线消息数（08/0B，所有正确的帧，不论地址）、总线通信错误数（08/0C，CRC 或 LRC 错误、帧过短、非法字符、超时）、字符溢出数（08/12，恒为 0：模拟器不会丢字符）。
+- 按监听器上的每台设备：异常数（08/0D，也包括广播中检出的错误，广播从不应答）、从站消息数（08/0E，发给本站的和广播的请求）、无应答数（08/0F，广播，以及因 Listen Only Mode 或 `no_response` / `disconnect` 故障而未应答的请求）、NAK 数（08/10，异常 07）、Busy 数（08/11，异常 06，例如 `busy` 故障），以及 FC 0B 的事件计数和 FC 0C 的事件日志。
+
+规格未写明或互相矛盾之处，ModbusSim 的处理如下：
+
+- 子功能 05-09 返回异常 03；13 以及 15 及以上返回异常 01。
+- 01 和 0A 同时清零该监听器的总线计数器；0A 不清事件日志。
+- Listen Only Mode：请求照常计数、记入日志，但不执行、不应答；只执行 08/01，且仍不应答。进入该模式时记录的事件字节为 `04`。广播写入会跳过处于 Listen Only Mode 的设备。
+- 广播只执行写功能码；广播中的其他功能码（包括诊断功能码）不执行，计为异常。
+- 事件计数统计每个无异常完成的请求，包括广播，但不含 FC 0B 和 0C 本身。
+- 03 只改变监听器在 ASCII 请求末尾期待的分隔符（每个监听器一个设置，其下设备共用）；应答仍以 CR LF 结尾。01 恢复为 LF。在 RTU 监听器上，03 照常回显但不起作用。
+- 故障注入：`exception` 或 `busy` 故障按真实异常计数；`no_response` 计为未应答。
 
 ## devices
 

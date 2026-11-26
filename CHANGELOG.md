@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Serial diagnostic function codes on `rtu` and `ascii` listeners: 07 Read Exception Status, 08 Diagnostics (sub-functions 00-04, 0A-12, 14, including Listen Only Mode and the ASCII input delimiter), 0B Get Comm Event Counter, 0C Get Comm Event Log and 11 Report Server ID. Bus counters are kept per listener, server counters, event counter and event log per device; fault injection exceptions are counted. TCP and RTU over TCP answer these function codes with exception 01. The interpretations of points the specifications leave open are listed in the configuration documentation.
 - Serial Modbus ASCII listener (`type: ascii`): `:` ... CR LF frames with LRC, default 19200 baud 7E1, unfinished frames dropped after `char_timeout` (default 1 s) or on a new `:`. Lower-case hex accepted. Works with `port: pty`; fault injection `corrupt_crc` inverts the LRC.
 - Serial listener `port: pty` (Linux, macOS, WSL2): ModbusSim creates a pseudo-terminal pair and the device under test opens the other end, optionally through a `link` symlink that is created at startup and removed on exit. No driver or root needed. The UI, the log and `/api/state` (`device`) show the path to open. Rejected at validation on Windows, with the alternatives in the message.
 

@@ -41,8 +41,13 @@ _NAMES = {
     0x04: "read input",
     0x05: "write coil",
     0x06: "write register",
+    0x07: "read exception status",
+    0x08: "diagnostics",
+    0x0B: "get comm event counter",
+    0x0C: "get comm event log",
     0x0F: "write coils",
     0x10: "write registers",
+    0x11: "report server id",
     0x16: "mask write register",
     0x17: "read/write registers",
     0x2B: "read device id",
@@ -227,6 +232,12 @@ def describe_request(pdu: bytes) -> str:
     if fc == 0x17 and len(pdu) >= 9:
         ra, rq, wa, wq = struct.unpack(">HHHH", pdu[1:9])
         return f"FC17 {name} read addr={ra} qty={rq} write addr={wa} qty={wq}"
+    if fc == 0x08:
+        from .diagnostics import describe_diagnostic
+
+        return describe_diagnostic(pdu) or f"FC08 {name} len={len(pdu)}"
+    if fc in (0x07, 0x0B, 0x0C, 0x11):
+        return f"FC{fc:02X} {name}"
     if fc == 0x2B:
         if len(pdu) >= 4 and pdu[1] == MEI_READ_DEVICE_ID:
             return f"FC2B/0E {name} code={pdu[2]:02X} object=0x{pdu[3]:02X}"
@@ -249,6 +260,6 @@ def describe_response(pdu: bytes) -> tuple[str, int | None]:
     if fc == 0x2B and len(pdu) >= 7 and pdu[1] == MEI_READ_DEVICE_ID:
         more = " more follows" if pdu[4] == 0xFF else ""
         return f"FC2B/0E ok {pdu[6]} objects{more}", None
-    if (fc in _READ_TABLES or fc == 0x17) and len(pdu) >= 2:
+    if (fc in _READ_TABLES or fc in (0x0C, 0x11, 0x17)) and len(pdu) >= 2:
         return f"FC{fc:02X} ok {pdu[1]} bytes", None
     return f"FC{fc:02X} ok", None

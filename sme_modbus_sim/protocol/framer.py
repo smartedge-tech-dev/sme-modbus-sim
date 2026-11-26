@@ -108,6 +108,12 @@ def rtu_request_length(buf: bytes) -> int | None:
     fc = buf[1]
     if 0x01 <= fc <= 0x06:
         return 8
+    if fc in (0x07, 0x0B, 0x0C, 0x11):  # unit fc crc(2)
+        return 4
+    if fc == 0x08:  # unit fc sub(2) data(2) crc(2); 08/00 echoes data of any length
+        if len(buf) < 4:
+            return None
+        return -1 if buf[2:4] == b"\x00\x00" else 8
     if fc in (0x0F, 0x10):
         if len(buf) < 7:
             return None

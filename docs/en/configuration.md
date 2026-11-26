@@ -84,7 +84,34 @@ listeners:
 
 ### Function codes
 
-01, 02, 03, 04, 05, 06, 0F, 10, 16 (mask write register), 17 (read/write multiple registers, write before read) and 2B / 0E (Read Device Identification: read codes 01 basic, 02 regular, 03 extended stream, 04 individual; long answers use More Follows). Writes through 16 / 17 pass the same checks as 06 / 10 (read-only points, partial multi-register values, min / max). Other function codes answer exception 01.
+01, 02, 03, 04, 05, 06, 0F, 10, 16 (mask write register), 17 (read/write multiple registers, write before read) and 2B / 0E (Read Device Identification: read codes 01 basic, 02 regular, 03 extended stream, 04 individual; long answers use More Follows). Serial listeners also answer 07, 08, 0B, 0C and 11 (see below). Writes through 16 / 17 pass the same checks as 06 / 10 (read-only points, partial multi-register values, min / max). Other function codes answer exception 01.
+
+### Serial diagnostics (FC 07 / 08 / 0B / 0C / 11)
+
+Serial listeners (`rtu`, `ascii`) also answer the "Serial Line only" function codes. TCP and RTU over TCP answer them with exception 01.
+
+| FC | Answer |
+|---|---|
+| 07 Read Exception Status | `00` |
+| 08 Diagnostics | sub-functions 00 echo (data of any length), 01 restart communications (data `0000` keeps the event log, `FF00` clears it), 02 diagnostic register (always 0), 03 change ASCII input delimiter, 04 force Listen Only Mode (no answer), 0A clear counters, 0B-12 counters, 14 clear overrun counter |
+| 0B Get Comm Event Counter | status `0000` (never busy) and the event counter |
+| 0C Get Comm Event Log | status, event counter, bus message count and up to 64 event bytes, newest first |
+| 11 Report Server ID | the device's `identification.product_code` as Server ID, run indicator `FF`, no additional data |
+
+Counters are 16 bit, wrap around and start at 0 when the listener starts.
+
+- Per listener (the line): bus message (08/0B, every correct frame whatever its address), bus communication error (08/0C, CRC or LRC errors, frames too short, invalid characters, timeouts), character overrun (08/12, always 0: the simulator never loses characters).
+- Per device on the listener: exception (08/0D, also errors in broadcasts, which are never answered), server message (08/0E, own and broadcast requests), no response (08/0F, broadcasts and requests left unanswered because of Listen Only Mode or a `no_response` / `disconnect` fault), NAK (08/10, exception 07), busy (08/11, exception 06, for example from the `busy` fault), the FC 0B event counter and the FC 0C event log.
+
+Where the specifications are silent or disagree, ModbusSim does this:
+
+- Sub-functions 05-09 answer exception 03; 13 and 15 or above answer exception 01.
+- 01 and 0A also clear the bus counters of the listener. 0A does not clear the event log.
+- Listen Only Mode: requests are still counted and logged but not executed or answered; only 08/01 is executed, still without an answer. The event byte for entering the mode is `04`. Broadcast writes skip a device in Listen Only Mode.
+- A broadcast executes only write function codes; any other function code in a broadcast (diagnostics included) is not executed and counts as an exception.
+- The event counter counts every request completed without an exception, broadcasts included, except FC 0B and 0C.
+- 03 changes only the delimiter the listener expects at the end of ASCII requests (one setting per listener, shared by its devices); answers still end with CR LF. 01 restores LF. On an RTU listener 03 is echoed and has no effect.
+- Fault injection: an `exception` or `busy` fault counts like the real exception; `no_response` counts as not answered.
 
 ## devices
 
