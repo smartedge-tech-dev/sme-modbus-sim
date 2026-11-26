@@ -2,8 +2,10 @@
 
 ## Windows exe
 
+![Devices, live register values, SOC trend and Modbus traffic](../assets/screenshots/en/overview.png)
+
 Download `sme-modbus-sim-<version>-windows.exe` from the
-[Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases) page and run it. The browser opens
+[Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest) page and run it. The browser opens
 the UI at <http://127.0.0.1:8081/>.
 
 ## Docker
@@ -84,6 +86,8 @@ Addresses in the configuration are 0-based protocol addresses; modpoll counts fr
 Both commands are **read-only** (only FC 01/02/03/04 and 2B/0E are sent), rate-limited (`--rate`, default 10
 requests/s) and print a summary with the estimated request count before asking `Proceed? [y/N]`
 (`-y` skips the question; without a terminal and without `-y` they abort).
+
+![Scan a real device (read-only)](../assets/screenshots/en/scan.png)
 
 ```bash
 # discover readable addresses and guess datatypes -> user template (guesses as YAML comments)

@@ -78,6 +78,7 @@ nav:
   - Reference:
       - http-api.md
       - changelog.md
+      - development.md
   - About:
       - commercial-support.md
       - license.md

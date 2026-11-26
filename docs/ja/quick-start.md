@@ -2,7 +2,9 @@
 
 ## Windows exe
 
-[Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases) から
+![デバイス一覧、レジスタのライブ値、SOC トレンド、Modbus 通信ログ](../assets/screenshots/ja/overview.png)
+
+[Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest) から
 `sme-modbus-sim-<version>-windows.exe` をダウンロードして実行します。ブラウザで <http://127.0.0.1:8081/> が開きます。
 
 ## Docker
@@ -83,6 +85,8 @@ client.close()
 どちらのコマンドも **読み取り専用**（FC 01/02/03/04 と 2B/0E のみ送信）で、送信レートを制限し（`--rate`、既定
 10 リクエスト/秒）、推定リクエスト数を含む概要を表示してから `Proceed? [y/N]` で確認します
 （`-y` で確認を省略。端末がなく `-y` もない場合は中止します）。
+
+![実機のスキャン（読み取り専用）](../assets/screenshots/ja/scan.png)
 
 ```bash
 # 読み取り可能なアドレスを探索してデータ型を推定 -> ユーザーテンプレート（推定は YAML コメント）

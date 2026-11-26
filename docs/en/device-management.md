@@ -4,6 +4,8 @@ Devices can be added, copied, edited and deleted from the web UI while the simul
 validated and applied with a configuration reload; the previous configuration keeps running if it fails.
 Use **File > Save** to write the result back to the config file.
 
+![Add device: built-in templates](../assets/screenshots/en/add-device.png)
+
 ## Add a device
 
 **Add device** (top of the device list) opens the template browser:

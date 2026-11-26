@@ -6,6 +6,8 @@ can be tested against timeouts, exceptions, broken frames and stale values. Rule
 REST API and are not part of the YAML configuration. They survive a configuration reload,
 but not a restart.
 
+![Fault injection: active rules and the new-rule form](../assets/screenshots/en/faults.png)
+
 ## Rule fields
 
 | Field | Default | Meaning |

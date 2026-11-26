@@ -4,6 +4,8 @@ A Modbus TCP / RTU device simulator with a live web UI. Simulate battery PCS, BM
 sensors — or any register map you describe in YAML — and watch the values change in the browser while a real
 Modbus master (your EMS, a gateway, modpoll, pymodbus…) reads and writes them.
 
+![Live register values, trend and Modbus traffic](../assets/screenshots/en/live.gif)
+
 - **Many devices, one port.** One listener serves many unit IDs; a device can be attached to several listeners.
   Modbus TCP, Modbus UDP, Modbus/TCP Security (TLS), Modbus RTU over TCP and serial RTU are supported side by side.
 - **Own protocol core.** Function codes 01, 02, 03, 04, 05, 06, 0F, 10, 16, 17 and 2B/0E (hex) with standard exception responses; serial listeners also answer the diagnostic function codes 07, 08, 0B, 0C and 11.
