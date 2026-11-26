@@ -20,6 +20,4 @@ SME ModbusSim 免费且采用 MIT 许可，由 [smart-edge（智届科技）](ht
 
 已在 0.2.0 中发布：串口 Modbus ASCII；内置 pty 虚拟串口对，免驱动做串口联调（Linux / macOS / WSL2）；串口诊断功能码 07 / 08 / 0B / 0C / 11。
 
-计划：
-
-- 0.3.0（网络）：Modbus UDP；Modbus/TCP Security（TLS）。
+已在 0.3.0 中发布：Modbus UDP 监听器；Modbus/TCP Security（TLS）监听器，支持客户端证书和按 role 授权；只读 scan / record 客户端支持 UDP 和 TLS。

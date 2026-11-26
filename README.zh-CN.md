@@ -102,9 +102,7 @@ Windows exe、多架构 Docker、离线包。
 
 已在 0.2.0 中发布：串口 Modbus ASCII；内置 pty 虚拟串口对，免驱动做串口联调（Linux / macOS / WSL2）；串口诊断功能码 07 / 08 / 0B / 0C / 11。
 
-计划：
-
-- 0.3.0（网络）：Modbus UDP；Modbus/TCP Security（TLS）。
+已在 0.3.0 中发布：Modbus UDP 监听器；Modbus/TCP Security（TLS）监听器，支持客户端证书和按 role 授权；只读 scan / record 客户端支持 UDP 和 TLS。
 
 > 与 SunSpec Alliance 无任何关联，未获其认可或认证。`sunspec_pv_inverter`（模型 1、103、120-123、160）、`sunspec_meter`（模型 1、203）、`sunspec_der`（模型 1、701-705）与 `sunspec_battery`（模型 1、802、803）模板由公开的 SunSpec 模型定义（Apache-2.0）生成，实现 SunSpec Modbus 模型。不内置任何厂商的寄存器表；自有厂商表可通过 Excel 或用户本地模板私下导入。
 

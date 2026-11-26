@@ -23,6 +23,4 @@ SunSpec Alliance とは提携・推奨・認証の関係にありません。Sun
 
 0.2.0 でリリース済み: シリアル Modbus ASCII、ドライバー不要のシリアル試験用 pty ペア内蔵（Linux / macOS / WSL2）、シリアル診断ファンクションコード 07 / 08 / 0B / 0C / 11。
 
-予定:
-
-- 0.3.0（ネットワーク）: Modbus UDP、Modbus/TCP Security（TLS）。
+0.3.0 でリリース済み: Modbus UDP リスナー、クライアント証明書とロールベース認可に対応した Modbus/TCP Security（TLS）リスナー、読み取り専用 scan / record クライアントの UDP / TLS 対応。
