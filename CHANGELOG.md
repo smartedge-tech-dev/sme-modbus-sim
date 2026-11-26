@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-26
+
+### Fixed
+
+- Modbus UDP listener on Windows: after answering a client that had already closed its port, the listener could stop receiving datagrams. ICMP port unreachable is no longer reported to the socket (`SIO_UDP_CONNRESET` off).
+
 ## [0.3.0] - 2026-11-26
 
 ### Added
