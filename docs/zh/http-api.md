@@ -66,6 +66,8 @@ curl -X POST http://127.0.0.1:8081/api/devices/PCS-1/points/p_setpoint/write \
 
 只要有客户端连接，`/ws` 每 2 秒推送一次各监听器的计数：
 
+![按监听器统计与寄存器趋势](../assets/screenshots/zh/stats.png)
+
 ```json
 {"type": "stats", "t": 1764052800.0, "stats": {"tcp1": {"type": "tcp", "requests": {"3": 120}, "exceptions": {}, "clients": 1}}}
 ```

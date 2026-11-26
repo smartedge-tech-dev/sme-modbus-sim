@@ -4,6 +4,8 @@
 あるいは YAML で記述した任意のレジスタマップを模擬し、実際の Modbus マスター（EMS、ゲートウェイ、modpoll、
 pymodbus など）が読み書きする様子を、値の変化とともにブラウザで確認できます。
 
+![レジスタのライブ値、トレンド、Modbus 通信ログ](../assets/screenshots/ja/live.gif)
+
 - **1 つのポートで複数デバイス。** 1 つのリスナーが複数のユニット ID を受け持ち、1 台のデバイスを複数のリスナーに
   接続することもできます。Modbus TCP、Modbus UDP、Modbus/TCP Security（TLS）、Modbus RTU over TCP、シリアル RTU を同時に利用できます。
 - **独自のプロトコルコア。** ファンクションコード 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E（16 進）に対応し、

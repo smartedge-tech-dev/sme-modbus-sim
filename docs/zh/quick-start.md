@@ -2,7 +2,9 @@
 
 ## Windows exe
 
-从 [Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases) 下载
+![设备列表、寄存器实时值、SOC 趋势与 Modbus 通信日志](../assets/screenshots/zh/overview.png)
+
+从 [Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest) 下载
 `sme-modbus-sim-<version>-windows.exe` 并运行，浏览器会打开 <http://127.0.0.1:8081/>。
 
 ## Docker
@@ -82,6 +84,8 @@ client.close()
 
 两个命令都是**只读**的（只发送 FC 01/02/03/04 与 2B/0E），带限速（`--rate`，默认每秒 10 个请求），
 执行前会显示含预估请求数的概要并询问 `Proceed? [y/N]`（`-y` 跳过确认；没有终端又没有 `-y` 时直接中止）。
+
+![扫描真实设备（只读）](../assets/screenshots/zh/scan.png)
 
 ```bash
 # 探测可读地址并推测数据类型 -> 用户模板（推测结果写成 YAML 注释）

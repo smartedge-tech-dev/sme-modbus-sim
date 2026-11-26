@@ -66,6 +66,8 @@ curl -X POST http://127.0.0.1:8081/api/devices/PCS-1/points/p_setpoint/write \
 
 クライアントが 1 つ以上接続している間、`/ws` はリスナーごとのカウンタを 2 秒ごとに送信します。
 
+![リスナー別の統計とレジスタのトレンド](../assets/screenshots/ja/stats.png)
+
 ```json
 {"type": "stats", "t": 1764052800.0, "stats": {"tcp1": {"type": "tcp", "requests": {"3": 120}, "exceptions": {}, "clients": 1}}}
 ```

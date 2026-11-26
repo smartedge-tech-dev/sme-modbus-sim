@@ -1,6 +1,16 @@
-# SME ModbusSim
+<p align="center"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/logo.svg" width="112" alt="SME ModbusSim logo"></p>
 
-[English](README.md) | **日本語** | [简体中文](README.zh-CN.md)
+<h1 align="center">SME ModbusSim</h1>
+
+<p align="center"><strong>ノート PC 1 台で、Modbus デバイスをまるごと再現。</strong><br>PCS・BMS・メータ・センサを TCP / UDP / TLS / シリアルで、ライブ Web UI 付き。</p>
+
+<p align="center"><a href="https://smartedge-tech.com/open-source/#modbus-sim"><b>Web サイト</b></a> · <a href="https://smartedge-tech-dev.github.io/sme-modbus-sim/ja/"><b>ドキュメント</b></a> · <a href="https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest"><b>ダウンロード</b></a></p>
+
+<p align="center"><a href="https://github.com/smartedge-tech-dev/sme-modbus-sim/actions/workflows/ci.yml"><img src="https://github.com/smartedge-tech-dev/sme-modbus-sim/actions/workflows/ci.yml/badge.svg" alt="CI"></a> <a href="https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest"><img src="https://img.shields.io/github/v/release/smartedge-tech-dev/sme-modbus-sim" alt="release"></a> <a href="https://github.com/smartedge-tech-dev/sme-modbus-sim/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-5b5bd6" alt="license MIT"></a> <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Docker-0a7bbb" alt="platform"> <img src="https://img.shields.io/badge/python-3.11%2B-3776ab" alt="python 3.11+"></p>
+
+<p align="center"><a href="README.md">English</a> | <strong>日本語</strong> | <a href="README.zh-CN.md">简体中文</a></p>
+
+<p align="center"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/live.gif" alt="レジスタのライブ値、トレンド、Modbus 通信ログ" width="100%"></p>
 
 ライブ Web UI 付きの Modbus TCP / RTU デバイスシミュレーターです。蓄電池 PCS、BMS、電力量計、環境センサー、
 あるいは YAML で記述した任意のレジスタマップを模擬し、実際の Modbus マスター（EMS、ゲートウェイ、modpoll、
@@ -28,11 +38,27 @@ pymodbus など）が読み書きする様子を、値の変化とともにブ�
 SME ModbusSim は無料の MIT ライセンスで、[smart-edge（智届科技）](https://smartedge-tech.com) が開発しています。
 カスタム開発も承ります。[商用サポート・カスタム開発](#商用サポートカスタム開発) をご覧ください。
 
+## スクリーンショット
+
+<table>
+  <tr>
+    <td width="50%"><a href="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/overview.png"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/overview.png" alt="デバイス一覧、レジスタのライブ値、SOC トレンド、例外を注入した Modbus 通信ログ"></a><br><sub>デバイス一覧、レジスタのライブ値、SOC トレンド、例外を注入した Modbus 通信ログ</sub></td>
+    <td width="50%"><a href="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/faults.png"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/faults.png" alt="障害注入：有効なルールと新規ルールフォーム"></a><br><sub>障害注入：有効なルールと新規ルールフォーム</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/stats.png"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/stats.png" alt="リスナー別の統計とレジスタのトレンド"></a><br><sub>リスナー別の統計とレジスタのトレンド</sub></td>
+    <td width="50%"><a href="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/add-device.png"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/add-device.png" alt="デバイスの追加：組み込みテンプレート"></a><br><sub>デバイスの追加：組み込みテンプレート</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/scan.png"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/scan.png" alt="実機のスキャン（読み取り専用）"></a><br><sub>実機のスキャン（読み取り専用）</sub></td>
+  </tr>
+</table>
+
 ## クイックスタート
 
 ### Windows exe
 
-[Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases) から `sme-modbus-sim-<version>-windows.exe`
+[Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest) から `sme-modbus-sim-<version>-windows.exe`
 をダウンロードして実行します。ブラウザで http://127.0.0.1:8081/ が開きます。
 
 ### Docker

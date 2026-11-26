@@ -66,6 +66,8 @@ re-written from the model (only the keys that were set are kept, YAML comments a
 
 While at least one client is connected, `/ws` pushes the per-listener counters every 2 s:
 
+![Per-listener statistics and a register trend](../assets/screenshots/en/stats.png)
+
 ```json
 {"type": "stats", "t": 1764052800.0, "stats": {"tcp1": {"type": "tcp", "requests": {"3": 120}, "exceptions": {}, "clients": 1}}}
 ```

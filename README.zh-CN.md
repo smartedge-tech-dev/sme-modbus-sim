@@ -1,6 +1,16 @@
-# SME ModbusSim
+<p align="center"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/logo.svg" width="112" alt="SME ModbusSim logo"></p>
 
-[English](README.md) | [日本語](README.ja.md) | **简体中文**
+<h1 align="center">SME ModbusSim</h1>
+
+<p align="center"><strong>一台电脑，模拟 Modbus 设备。</strong><br>PCS、BMS、电表、传感器可走 TCP、UDP、TLS 与串口，附带实时 Web UI。</p>
+
+<p align="center"><a href="https://smartedge-tech.com/zh/open-source/#modbus-sim"><b>官网</b></a> · <a href="https://smartedge-tech-dev.github.io/sme-modbus-sim/zh/"><b>文档</b></a> · <a href="https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest"><b>下载</b></a></p>
+
+<p align="center"><a href="https://github.com/smartedge-tech-dev/sme-modbus-sim/actions/workflows/ci.yml"><img src="https://github.com/smartedge-tech-dev/sme-modbus-sim/actions/workflows/ci.yml/badge.svg" alt="CI"></a> <a href="https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest"><img src="https://img.shields.io/github/v/release/smartedge-tech-dev/sme-modbus-sim" alt="release"></a> <a href="https://github.com/smartedge-tech-dev/sme-modbus-sim/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-5b5bd6" alt="license MIT"></a> <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20Docker-0a7bbb" alt="platform"> <img src="https://img.shields.io/badge/python-3.11%2B-3776ab" alt="python 3.11+"></p>
+
+<p align="center"><a href="README.md">English</a> | <a href="README.ja.md">日本語</a> | <strong>简体中文</strong></p>
+
+<p align="center"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/live.gif" alt="寄存器实时值、趋势与 Modbus 通信日志" width="100%"></p>
 
 一个带实时 Web UI 的 Modbus TCP / RTU 设备模拟器。可以模拟储能 PCS、BMS、电能表、环境传感器，或任何用 YAML 描述的寄存器表，并在浏览器中观察数值变化，同时由真实的 Modbus 主站（你的 EMS、网关、modpoll、pymodbus……）读写这些设备。
 
@@ -17,11 +27,27 @@
 
 SME ModbusSim 免费且采用 MIT 许可，由 [smart-edge（智届科技）](https://smartedge-tech.com) 开发，也可承接定制开发，详见[商务支持与定制开发](#商务支持与定制开发)。
 
+## 截图
+
+<table>
+  <tr>
+    <td width="50%"><a href="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/overview.png"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/overview.png" alt="设备列表、寄存器实时值、SOC 趋势，以及注入了异常的 Modbus 通信日志"></a><br><sub>设备列表、寄存器实时值、SOC 趋势，以及注入了异常的 Modbus 通信日志</sub></td>
+    <td width="50%"><a href="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/faults.png"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/faults.png" alt="故障注入：生效中的规则与新建规则表单"></a><br><sub>故障注入：生效中的规则与新建规则表单</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/stats.png"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/stats.png" alt="按监听器统计与寄存器趋势"></a><br><sub>按监听器统计与寄存器趋势</sub></td>
+    <td width="50%"><a href="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/add-device.png"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/add-device.png" alt="添加设备：内置模板"></a><br><sub>添加设备：内置模板</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/scan.png"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/scan.png" alt="扫描真实设备（只读）"></a><br><sub>扫描真实设备（只读）</sub></td>
+  </tr>
+</table>
+
 ## 快速开始
 
 ### Windows exe
 
-从 [Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases) 下载 `sme-modbus-sim-<version>-windows.exe` 并运行，浏览器会打开 http://127.0.0.1:8081/ 。
+从 [Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest) 下载 `sme-modbus-sim-<version>-windows.exe` 并运行，浏览器会打开 http://127.0.0.1:8081/ 。
 
 ### Docker
 
