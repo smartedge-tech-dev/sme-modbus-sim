@@ -1,4 +1,4 @@
-"""asyncio Modbus TCP / RTU-over-TCP / UDP server.
+"""asyncio Modbus TCP / RTU-over-TCP / UDP / TLS (Modbus/TCP Security) server.
 
 Unit id routing:
   * ``unit_id_mode="any"``    -- every request goes to ``default_unit`` (RTU unit 0 is still broadcast).
@@ -18,12 +18,18 @@ Fault injection (design 5.4): when ``faults`` (a ``sme_modbus_sim.faults.FaultMa
 every request frame is evaluated once before execution; exception / busy / no_response /
 disconnect replace the execution, the other actions alter the encoded response
 (``encode_response``). ``refuse_connections`` closes new connections in the accept path.
+
+TLS (``ssl_context`` set): the handshake runs per connection after the refuse check, so a failed
+handshake is traced. With an ``authorizer`` the role of the client certificate decides which function
+codes may run; a refused request answers exception 01 and the connection stays open (R-31). The
+check comes before fault injection.
 """
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import socket
+import ssl
 import time
 from dataclasses import dataclass
 from typing import Callable, Iterable
@@ -32,6 +38,7 @@ from .constants import ExceptionCode
 from .framer import AsciiFramer, DroppedFrame, Frame, MbapFramer, RtuFramer
 from .pdu import describe_request, describe_response, exception_response, handle_pdu, is_write
 from .store import UnitStore
+from .tls import HANDSHAKE_TIMEOUT_S, cert_role
 
 FRAMERS = ("tcp", "rtu_over_tcp")
 UNIT_ID_MODES = ("strict", "any")
@@ -97,6 +104,8 @@ class ModbusTcpServer:
         all_units: Callable[[], Iterable[UnitStore]] | None = None,
         pdu_handler: PduHandler = handle_pdu,
         faults=None,
+        ssl_context: ssl.SSLContext | None = None,
+        authorizer=None,
     ) -> None:
         if framer not in FRAMERS:
             raise ValueError(f"invalid framer: {framer!r}")
@@ -109,7 +118,10 @@ class ModbusTcpServer:
         self.host = host
         self.port = port
         self.framer = framer
-        self.kind = self.kind or framer
+        self.kind = self.kind or ("tls" if ssl_context is not None else framer)
+        self.ssl_context = ssl_context
+        self.authorizer = authorizer  # sme_modbus_sim.protocol.tls.Authorizer
+        self._roles: dict[asyncio.StreamWriter, str | None] = {}
         self.resolver: Resolver = resolver or (lambda _uid: None)
         self.unit_id_mode = unit_id_mode
         self.default_unit = default_unit
@@ -215,6 +227,15 @@ class ModbusTcpServer:
         self._writers.add(writer)
         framer = MbapFramer() if self.framer == "tcp" else RtuFramer()
         try:
+            if self.ssl_context is not None:
+                try:
+                    await writer.start_tls(self.ssl_context, ssl_handshake_timeout=HANDSHAKE_TIMEOUT_S)
+                except (ssl.SSLError, OSError, asyncio.TimeoutError) as e:
+                    reason = getattr(e, "reason", None) or str(e) or type(e).__name__
+                    self._emit(peer, "rx", b"", None, None, "TLS handshake failed", error=f"TLS handshake failed: {reason}")
+                    return
+                sslobj = writer.get_extra_info("ssl_object")
+                self._roles[writer] = cert_role(sslobj.getpeercert(binary_form=True) if sslobj else None)
             while True:
                 if framer.has_partial and self.framer == "rtu_over_tcp":
                     try:
@@ -236,6 +257,7 @@ class ModbusTcpServer:
             pass
         finally:
             self._writers.discard(writer)
+            self._roles.pop(writer, None)
             with contextlib.suppress(Exception):
                 writer.close()
             if task is not None:
@@ -250,6 +272,18 @@ class ModbusTcpServer:
                     return False
                 continue
             fc = item.pdu[0] if item.pdu else None
+            if self.authorizer is not None and fc is not None:
+                role = self._roles.get(writer)
+                if not self.authorizer.allowed(role, fc):
+                    self._emit(peer, "rx", item.raw, item.unit_id, fc, describe_request(item.pdu),
+                               error=f"not authorized (role {role!r})" if role is not None else "not authorized (no role)")
+                    resp = exception_response(fc, ExceptionCode.ILLEGAL_FUNCTION)
+                    raw = encode_response(self.framer, item.transaction_id or 0, item.unit_id, resp)
+                    summary, exc = describe_response(resp)
+                    self._emit(peer, "tx", raw, item.unit_id, fc & 0x7F, summary, exc)
+                    writer.write(raw)
+                    await writer.drain()
+                    continue
             hit = None
             if self.faults is not None and item.pdu and not (self.framer == "rtu_over_tcp" and item.unit_id == 0):
                 hit = self.faults.evaluate(self.listener_id, self.framer, item.unit_id, item.pdu)

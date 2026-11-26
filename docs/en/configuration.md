@@ -33,8 +33,8 @@ devices:
 | Key | Meaning |
 |---|---|
 | `id` | Name used by `devices[].listeners` |
-| `type` | `tcp` (Modbus TCP, MBAP), `udp` (Modbus TCP / MBAP frames in UDP datagrams), `rtu_over_tcp` (RTU frames with CRC-16 over a TCP socket) `rtu` (serial line, RTU) or `ascii` (serial line, Modbus ASCII) |
-| `host`, `port` | `tcp` / `rtu_over_tcp`: bind address and TCP port (default 5020; ports below 1024 need privileges). `udp`: bind address and UDP port (1-65535, default 5020). `rtu` / `ascii`: `port` is the serial device (`COM5`, `/dev/ttyUSB0`) or a pyserial URL (`socket://host:port`, `rfc2217://...`), or `pty` (see below); `host` is ignored |
+| `type` | `tcp` (Modbus TCP, MBAP), `udp` (Modbus TCP / MBAP frames in UDP datagrams), `tls` (Modbus/TCP Security: MBAP over TLS), `rtu_over_tcp` (RTU frames with CRC-16 over a TCP socket) `rtu` (serial line, RTU) or `ascii` (serial line, Modbus ASCII) |
+| `host`, `port` | `tcp` / `rtu_over_tcp`: bind address and TCP port (default 5020; ports below 1024 need privileges). `udp`: bind address and UDP port (1-65535, default 5020). `tls`: bind address and TCP port (default 8020; the registered port is 802). `rtu` / `ascii`: `port` is the serial device (`COM5`, `/dev/ttyUSB0`) or a pyserial URL (`socket://host:port`, `rfc2217://...`), or `pty` (see below); `host` is ignored |
 | `unit_id_mode` | `strict`: only configured unit IDs answer. `any`: every unit ID is routed to `default_unit` |
 | `unknown_unit` | In `strict` mode: `ignore` (no response, like a real bus) or `exception` (gateway exception) |
 | `default_unit` | Unit ID used by `any` mode and for TCP / UDP unit IDs 0 / 255 |
@@ -56,6 +56,68 @@ listeners:
 - Unit routing (`unit_id_mode`, `unknown_unit`, `default_unit`, unit IDs 0 / 255) is the same as for `tcp`. Serial-only keys are rejected as for `tcp`.
 - A `udp` and a `tcp` listener may use the same `host:port`; two `udp` listeners on the same `host:port` are rejected.
 - UDP has no connections: the client count in the stats and the UI is the number of distinct source addresses seen in the last 60 s.
+
+### Modbus/TCP Security (`type: tls`)
+
+```yaml
+listeners:
+  - id: secure
+    type: tls
+    port: 8020
+    certificate: pki/server.crt
+    private_key: pki/server.key
+    ca: pki/ca.crt
+    roles:
+      operator: all
+      viewer: read
+      tuner: [3, 6, 16]
+```
+
+- MBAP over TLS, following "MB-TCP-Security v36 (2021-07-30)". The default port is 8020 (the registered port is 802; 8020 needs no privileges, like 5020 for 502).
+- Keys, valid for `type: tls` only. Relative paths are relative to the configuration file.
+
+| Key | Meaning |
+|---|---|
+| `certificate` | Server certificate (PEM, may contain the chain). Required |
+| `private_key` | Private key of the server certificate (PEM) |
+| `ca` | CA certificates (PEM) used to verify client certificates |
+| `client_auth` | Default `true`: a client certificate is required (spec R-07 / R-08), so `ca` is required too. `false`: the client certificate is optional |
+| `crl` | Optional CRL (PEM); it checks the leaf client certificate. Needs `ca` |
+| `roles` | Map role -> `all`, `read` or a list of function codes (1-127). Needs `ca` |
+
+- TLS 1.2 is the minimum, TLS 1.3 is allowed. TLS 1.2 cipher suites are limited to ECDHE with AES-GCM or ChaCha20 (this includes the mandatory `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`); no compression. The client host name is not checked (the specification defines no check).
+- **Role.** The role is read from the client certificate extension with OID `1.3.6.1.4.1.50316.802.1` (a UTF8String). The extension must be non-critical: OpenSSL rejects a certificate with an unknown critical extension, so the handshake fails (`CERTIFICATE_VERIFY_FAILED`).
+- **Authorization.** Without `roles` there is no authorization. With `roles`, a listed role gets its rights; an unlisted role, or a certificate without a role, may only read (FC 01, 02, 03, 04 and 2B/0E). A refused request is answered with exception 01 (Illegal Function, spec R-31) and traced as an rx event with the error `not authorized (role 'x')` or `not authorized (no role)`; the connection stays open. Authorization works by function code only (the specification's inputs are role and function code), not by address range, and it is checked before fault injection.
+- A failed handshake is traced as the rx event "TLS handshake failed" with the reason, and the connection is closed. Faults apply as on `tcp`.
+- Read-only client: `sme-modbus-sim scan` / `record` with `--transport tls --host H [--port 802] [--ca ca.crt] [--cert client.crt --key client.key]`. The default port is 802; without `--ca` the server certificate is not verified. In the Web UI and the API the target keys are `ca`, `certificate` and `private_key` (the three inputs are shown for type `tls` only).
+
+Test PKI with `openssl` (a test CA, a server certificate and a client certificate with the role `operator`):
+
+```bash
+# For testing only. Needs openssl; on Windows run it in Git Bash (add: export MSYS_NO_PATHCONV=1).
+mkdir pki && cd pki
+cat > ext.cnf <<'EOF'
+[server]
+basicConstraints = CA:FALSE
+subjectAltName = DNS:localhost,IP:127.0.0.1
+extendedKeyUsage = serverAuth
+[client]
+basicConstraints = CA:FALSE
+extendedKeyUsage = clientAuth
+1.3.6.1.4.1.50316.802.1 = ASN1:UTF8String:operator
+EOF
+# test CA
+openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt -days 365 -subj "/CN=Test CA" \
+  -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+# server certificate
+openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=localhost"
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 \
+  -extfile ext.cnf -extensions server
+# client certificate carrying the role "operator"
+openssl req -newkey rsa:2048 -nodes -keyout client.key -out client.csr -subj "/CN=operator1"
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 365 \
+  -extfile ext.cnf -extensions client
+```
 
 ### Serial RTU (`type: rtu`)
 

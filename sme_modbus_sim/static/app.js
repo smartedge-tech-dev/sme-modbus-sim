@@ -982,13 +982,17 @@ function fmtDur(s) {
 const fmtV = (v) => (v == null ? "" : typeof v === "number" ? String(+v.toPrecision(7)) : String(v));
 
 function targetHtml(p) {
-  // kind: "" (always shown), "net" (tcp / rtu_over_tcp / udp) or "ser" (serial rtu); tgtSync() toggles them.
+  // kind: "" (always shown), "net" (tcp / rtu_over_tcp / udp / tls), "tls" (tls only) or "ser" (serial rtu);
+  // tgtSync() toggles them.
   const f = (kind, key, input, wide) => `<label class="ddf${wide ? " wide" : ""}"${kind ? ` data-${kind}="1"` : ""}><span>${esc(t(key))}</span>${input}</label>`;
   return f("", "tgt.type", `<select id="${p}Type"><option value="tcp">${esc(t("tgt.type.tcp"))}</option>
       <option value="rtu_over_tcp">${esc(t("tgt.type.rtu_over_tcp"))}</option>
-      <option value="udp">${esc(t("tgt.type.udp"))}</option><option value="rtu">${esc(t("tgt.type.rtu"))}</option></select>`)
+      <option value="udp">${esc(t("tgt.type.udp"))}</option><option value="tls">${esc(t("tgt.type.tls"))}</option><option value="rtu">${esc(t("tgt.type.rtu"))}</option></select>`)
     + f("net", "tgt.host", `<input id="${p}Host" spellcheck="false" placeholder="192.168.0.10">`, true)
     + f("net", "tgt.port", `<input id="${p}Port" type="number" min="1" max="65535" value="502">`)
+    + f("tls", "tgt.ca", `<input id="${p}Ca" spellcheck="false" placeholder="ca.crt">`, true)
+    + f("tls", "tgt.cert", `<input id="${p}Cert" spellcheck="false" placeholder="client.crt">`, true)
+    + f("tls", "tgt.key", `<input id="${p}Key" spellcheck="false" placeholder="client.key">`, true)
     + f("ser", "tgt.serial", `<input id="${p}Ser" spellcheck="false" placeholder="COM5">`, true)
     + f("ser", "tgt.baud", `<input id="${p}Baud" type="number" min="300" value="19200">`)
     + f("ser", "tgt.parity", `<select id="${p}Par"><option>E</option><option>N</option><option>O</option></select>`)
@@ -997,8 +1001,12 @@ function targetHtml(p) {
 }
 
 function tgtSync(p) {
-  const ser = $(`${p}Type`).value === "rtu";
+  const type = $(`${p}Type`).value, ser = type === "rtu";
   $(`${p}Target`).querySelectorAll("[data-net]").forEach((x) => { x.hidden = ser; });
+  $(`${p}Target`).querySelectorAll("[data-tls]").forEach((x) => { x.hidden = type !== "tls"; });
+  const port = $(`${p}Port`);  // follow the default port of the type unless the user typed another one
+  if (type === "tls" && port.value === "502") port.value = "802";
+  if (type !== "tls" && port.value === "802") port.value = "502";
   $(`${p}Target`).querySelectorAll("[data-ser]").forEach((x) => { x.hidden = !ser; });
 }
 
@@ -1013,7 +1021,10 @@ function tgtFill(p, f) {
     $(`${p}Stop`).value = String(g.stopbits || 1);
   } else {
     $(`${p}Host`).value = g.host || "";
-    $(`${p}Port`).value = g.port || 502;
+    $(`${p}Port`).value = g.port || (g.type === "tls" ? 802 : 502);
+    $(`${p}Ca`).value = g.ca || "";
+    $(`${p}Cert`).value = g.certificate || "";
+    $(`${p}Key`).value = g.private_key || "";
   }
   $(`${p}Unit`).value = f.unit ?? 1;
   tgtSync(p);
@@ -1024,6 +1035,12 @@ function tgtRead(p) {
   const target = type === "rtu"
     ? { type, port: $(`${p}Ser`).value.trim(), baudrate: Number($(`${p}Baud`).value), parity: $(`${p}Par`).value, stopbits: Number($(`${p}Stop`).value) }
     : { type, host: $(`${p}Host`).value.trim(), port: Number($(`${p}Port`).value) };
+  if (type === "tls") {
+    for (const [k, id] of [["ca", "Ca"], ["certificate", "Cert"], ["private_key", "Key"]]) {
+      const v = $(`${p}${id}`).value.trim();
+      if (v) target[k] = v;
+    }
+  }
   return { target, unit: Number($(`${p}Unit`).value) };
 }
 

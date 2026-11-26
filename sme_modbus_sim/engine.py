@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import ssl
 import time
 from collections import deque
 from dataclasses import asdict
@@ -36,7 +37,7 @@ from sme_sim_common.engine import BaseEngine
 
 from . import __version__
 from .behaviors import Behavior, ident, make_behavior
-from .config import BIT_TABLES, DeviceConfig, IdentificationConfig, PointConfig, SERIAL_TYPES, SimConfig, dump_yaml, register_count
+from .config import BIT_TABLES, DeviceConfig, IdentificationConfig, ListenerConfig, PointConfig, SERIAL_TYPES, SimConfig, dump_yaml, register_count
 from .faults import FaultManager
 from .protocol import datatypes as dtypes
 from .protocol.constants import ExceptionCode
@@ -44,6 +45,7 @@ from .protocol.errors import ModbusError
 from .protocol.serial_server import ModbusSerialServer
 from .protocol.server import ModbusTcpServer, ModbusUdpServer, TraceEvent
 from .protocol.store import UnitStore
+from .protocol.tls import Authorizer, server_context
 from . import templates as tpl
 from .templates import expand_device
 
@@ -421,6 +423,13 @@ class Engine(BaseEngine):
                     strict_timing=bool(lc.strict_timing), link=lc.link,
                     framer=lc.type, char_timeout=lc.char_timeout or 1.0)
                 continue
+            if lc.type == "tls":
+                servers[lc.id] = ModbusTcpServer(
+                    host, port, framer="tcp", resolver=units.get, unit_id_mode=lc.unit_id_mode,
+                    default_unit=lc.default_unit, trace=self._on_trace, listener_id=lc.id,
+                    unknown_unit=lc.unknown_unit, ssl_context=self._tls_context(lc),
+                    authorizer=Authorizer(lc.roles) if lc.roles is not None else None)
+                continue
             cls = ModbusUdpServer if lc.type == "udp" else ModbusTcpServer
             servers[lc.id] = cls(
                 host, port, framer=lc.type, resolver=units.get, unit_id_mode=lc.unit_id_mode,
@@ -430,6 +439,14 @@ class Engine(BaseEngine):
         for srv in servers.values():
             srv.faults = self.faults
         return servers
+
+    def _tls_context(self, lc: ListenerConfig):
+        try:
+            return server_context(lc.certificate, lc.private_key, lc.ca, client_auth=bool(lc.client_auth),
+                                  crl=lc.crl, base_dir=self.base_dir)
+        except (OSError, ssl.SSLError) as e:
+            raise ValueError(f"listener {lc.id!r}: cannot load TLS certificate / key / CA: "
+                             f"{getattr(e, 'strerror', None) or e}") from None
 
     async def _start_servers(self, servers: Dict[str, Any]) -> None:
         """Start all listeners. TCP bind errors abort (and roll back); a serial port that cannot be

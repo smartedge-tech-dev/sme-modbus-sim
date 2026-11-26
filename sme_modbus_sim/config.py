@@ -44,6 +44,7 @@ _Model = StrictModel  # unknown keys are errors; fields can be filled by name or
 
 
 SERIAL_TYPES = ("rtu", "ascii")
+TLS_DEFAULT_PORT = 8020  # Modbus/TCP Security uses 802; 8020 needs no privileges (like 5020 for 502)
 
 
 class SimulationConfig(_Model):
@@ -58,6 +59,11 @@ class ListenerConfig(_Model):
 
     ``tcp`` / ``rtu_over_tcp``: ``host`` + TCP ``port`` (int). ``udp``: ``host`` + UDP ``port``, one MBAP ADU
     per datagram.
+    ``tls`` (Modbus/TCP Security): MBAP over TLS 1.2+, default port 8020 (the specification's port is 802).
+    ``certificate`` (PEM, may include the chain) and ``private_key`` identify the server; ``ca`` verifies
+    client certificates, required unless ``client_auth: false``; ``crl`` optionally revokes them;
+    ``roles`` maps the role in a client certificate to ``all``, ``read`` or a list of function codes
+    (no ``roles``: no authorization). Relative paths are relative to the configuration file.
     ``rtu`` (serial line): ``port`` is a device name or pyserial URL (``COM5``, ``/dev/ttyUSB0``,
     ``socket://host:port``, ``rfc2217://...``); ``baudrate`` / ``bytesize`` / ``parity`` / ``stopbits`` /
     ``strict_timing`` apply only to it. Defaults follow Modbus over Serial Line V1.02: 8 data bits,
@@ -70,7 +76,7 @@ class ListenerConfig(_Model):
     """
 
     id: str = Field(min_length=1)
-    type: Literal["tcp", "rtu_over_tcp", "udp", "rtu", "ascii"] = "tcp"
+    type: Literal["tcp", "rtu_over_tcp", "udp", "tls", "rtu", "ascii"] = "tcp"
     host: str = "0.0.0.0"
     port: Union[int, str] = 5020
     unit_id_mode: Literal["strict", "any"] = "strict"
@@ -83,6 +89,12 @@ class ListenerConfig(_Model):
     strict_timing: Optional[bool] = None
     link: Optional[str] = Field(default=None, min_length=1)
     char_timeout: Optional[float] = Field(default=None, gt=0, le=60)
+    certificate: Optional[str] = Field(default=None, min_length=1)
+    private_key: Optional[str] = Field(default=None, min_length=1)
+    ca: Optional[str] = Field(default=None, min_length=1)
+    client_auth: Optional[bool] = None
+    crl: Optional[str] = Field(default=None, min_length=1)
+    roles: Optional[Dict[str, Union[Literal["all", "read"], List[int]]]] = None
 
     @field_validator("port")
     @classmethod
@@ -138,6 +150,26 @@ class ListenerConfig(_Model):
         used = [f for f in serial_fields if getattr(self, f) is not None]
         if used:
             raise ValueError(f"listener {self.id!r}: {', '.join(used)} only apply to serial listeners (type rtu / ascii)")
+        tls_fields = ("certificate", "private_key", "ca", "client_auth", "crl", "roles")
+        if self.type != "tls":
+            used = [f for f in tls_fields if getattr(self, f) is not None]
+            if used:
+                raise ValueError(f"listener {self.id!r}: {', '.join(used)} only apply to type tls")
+            return self
+        if "port" not in self.model_fields_set:
+            self.port = TLS_DEFAULT_PORT
+        if self.certificate is None:
+            raise ValueError(f"listener {self.id!r}: type tls needs certificate (PEM) and private_key")
+        if self.client_auth is None:
+            self.client_auth = True
+        if self.client_auth and self.ca is None:
+            raise ValueError(f"listener {self.id!r}: type tls needs ca to verify client certificates "
+                             "(or client_auth: false)")
+        if (self.crl is not None or self.roles is not None) and self.ca is None:
+            raise ValueError(f"listener {self.id!r}: crl and roles need ca (client certificates)")
+        for role, rights in (self.roles or {}).items():
+            if isinstance(rights, list) and not all(1 <= fc <= 127 for fc in rights):
+                raise ValueError(f"listener {self.id!r}: role {role!r}: function codes must be 1..127")
         return self
 
 

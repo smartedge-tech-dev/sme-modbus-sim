@@ -97,11 +97,14 @@ def parse_ranges(values: Iterable[Any]) -> List[ScanRange]:
     return out
 
 
-TARGET_KEYS = ("type", "host", "port", "baudrate", "bytesize", "parity", "stopbits")
+TARGET_KEYS = ("type", "host", "port", "baudrate", "bytesize", "parity", "stopbits", "ca", "certificate",
+               "private_key")
+TLS_KEYS = ("ca", "certificate", "private_key")
 
 
 def make_client(target: Dict[str, Any], timeout: float = 1.0, rate: float = 10.0, **kw: Any) -> ModbusClient:
-    """Client from a listener-style target ``{type, host, port, baudrate, bytesize, parity, stopbits}``."""
+    """Client from a listener-style target ``{type, host, port, baudrate, bytesize, parity, stopbits}``;
+    type ``tls`` also takes ``ca`` / ``certificate`` / ``private_key`` (PEM file paths)."""
     if not isinstance(target, dict):
         raise ValueError("target must be an object {type, host, port, ...}")
     unknown = sorted(set(target) - set(TARGET_KEYS))
@@ -118,13 +121,17 @@ def make_client(target: Dict[str, Any], timeout: float = 1.0, rate: float = 10.0
     if not host:
         raise ValueError(f"target type {kind} needs host")
     proto = "UDP" if kind == "udp" else "TCP"
+    tls = {k: str(target[k]).strip() for k in TLS_KEYS if str(target.get(k) or "").strip()}
+    if tls and kind != "tls":
+        raise ValueError(f"target keys {', '.join(tls)} only apply to type tls")
     try:
-        port = int(target.get("port", 502))
+        p = target.get("port")
+        port = int(p if p not in (None, "") else (802 if kind == "tls" else 502))
     except (TypeError, ValueError):
         raise ValueError(f"target port must be a {proto} port 1..65535") from None
     if not 1 <= port <= 65535:
         raise ValueError(f"target port must be a {proto} port 1..65535")
-    return ModbusClient(kind, host=host, port=port, timeout=timeout, rate=rate, **kw)
+    return ModbusClient(kind, host=host, port=port, timeout=timeout, rate=rate, **tls, **kw)
 
 
 def check_unit(unit: Any) -> int:

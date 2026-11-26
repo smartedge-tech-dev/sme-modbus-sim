@@ -33,8 +33,8 @@ devices:
 | キー | 内容 |
 |---|---|
 | `id` | `devices[].listeners` から参照する名前 |
-| `type` | `tcp`（Modbus TCP、MBAP）、`udp`（UDP データグラム内の Modbus TCP / MBAP フレーム）、`rtu_over_tcp`（TCP ソケット上の CRC-16 付き RTU フレーム）`rtu`（シリアル回線、RTU）または `ascii`（シリアル回線、Modbus ASCII） |
-| `host`, `port` | `tcp` / `rtu_over_tcp`: バインドアドレスと TCP ポート（既定 5020。1024 未満は権限が必要）。`udp`: バインドアドレスと UDP ポート（1-65535、既定 5020）。`rtu` / `ascii`: `port` はシリアルデバイス（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）、または `pty`（後述）。`host` は無視 |
+| `type` | `tcp`（Modbus TCP、MBAP）、`udp`（UDP データグラム内の Modbus TCP / MBAP フレーム）、`tls`（Modbus/TCP Security: TLS 上の MBAP）、`rtu_over_tcp`（TCP ソケット上の CRC-16 付き RTU フレーム）`rtu`（シリアル回線、RTU）または `ascii`（シリアル回線、Modbus ASCII） |
+| `host`, `port` | `tcp` / `rtu_over_tcp`: バインドアドレスと TCP ポート（既定 5020。1024 未満は権限が必要）。`udp`: バインドアドレスと UDP ポート（1-65535、既定 5020）。`tls`: バインドアドレスと TCP ポート（既定 8020。登録ポートは 802）。`rtu` / `ascii`: `port` はシリアルデバイス（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）、または `pty`（後述）。`host` は無視 |
 | `unit_id_mode` | `strict`: 設定済みのユニット ID のみ応答。`any`: すべてのユニット ID を `default_unit` に振り向ける |
 | `unknown_unit` | `strict` 時の動作。`ignore`（実際のバスと同様に無応答）または `exception`（ゲートウェイ例外） |
 | `default_unit` | `any` モード、および TCP のユニット ID 0 / 255 で使うユニット ID |
@@ -56,6 +56,68 @@ listeners:
 - ユニットのルーティング（`unit_id_mode`、`unknown_unit`、`default_unit`、ユニット ID 0 / 255）は `tcp` と同じ。シリアル専用のキーは `tcp` と同様に拒否する。
 - `udp` と `tcp` のリスナーは同じ `host:port` を使える。同じ `host:port` の `udp` リスナー 2 つは拒否する。
 - UDP には接続がない。統計と UI のクライアント数は、直近 60 s に見えた送信元アドレスの種類の数。
+
+### Modbus/TCP Security（`type: tls`）
+
+```yaml
+listeners:
+  - id: secure
+    type: tls
+    port: 8020
+    certificate: pki/server.crt
+    private_key: pki/server.key
+    ca: pki/ca.crt
+    roles:
+      operator: all
+      viewer: read
+      tuner: [3, 6, 16]
+```
+
+- TLS 上の MBAP。「MB-TCP-Security v36 (2021-07-30)」に従う。既定ポートは 8020（登録ポートは 802。8020 は権限が不要で、502 に対する 5020 と同じ位置づけ）。
+- 以下のキーは `type: tls` でのみ有効。相対パスは設定ファイルからの相対。
+
+| キー | 意味 |
+|---|---|
+| `certificate` | サーバー証明書（PEM。チェーンを含めてよい）。必須 |
+| `private_key` | サーバー証明書の秘密鍵（PEM） |
+| `ca` | クライアント証明書の検証に使う CA 証明書（PEM） |
+| `client_auth` | 既定 `true`: クライアント証明書を必須とする（仕様 R-07 / R-08）ため `ca` も必須。`false`: クライアント証明書は任意 |
+| `crl` | 任意の CRL（PEM）。クライアント証明書本体（leaf）を検査する。`ca` が必要 |
+| `roles` | ロール -> `all`、`read`、またはファンクションコードのリスト（1-127）のマップ。`ca` が必要 |
+
+- 最低 TLS 1.2、TLS 1.3 も可。TLS 1.2 の暗号スイートは ECDHE と AES-GCM または ChaCha20 の組み合わせに限る（必須の `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256` を含む）。圧縮は無効。クライアントはホスト名を検査しない（仕様に検査の定めがないため）。
+- **ロール。** ロールはクライアント証明書の OID `1.3.6.1.4.1.50316.802.1` の拡張（UTF8String）から読む。この拡張は non-critical でなければならない。未知の critical 拡張を持つ証明書は OpenSSL が拒否するため、ハンドシェイクが失敗する（`CERTIFICATE_VERIFY_FAILED`）。
+- **認可。** `roles` がなければ認可は行わない。`roles` がある場合、列挙したロールはその権限を得る。列挙にないロール、またはロールのない証明書は読み取りのみ可（FC 01、02、03、04、2B/0E）。拒否した要求には例外 01（Illegal Function、仕様 R-31）で応答し、トレースには rx イベントとしてエラー `not authorized (role 'x')` または `not authorized (no role)` を記録する。接続は維持する。認可はファンクションコードのみで判断し（仕様の認可入力はロールとファンクションコード）、アドレス範囲は見ない。フォールトインジェクションより前に検査する。
+- ハンドシェイク失敗は、理由付きの rx イベント "TLS handshake failed" としてトレースに記録し、接続を閉じる。フォールトは `tcp` と同様に適用される。
+- 読み取り専用クライアント: `sme-modbus-sim scan` / `record` に `--transport tls --host H [--port 802] [--ca ca.crt] [--cert client.crt --key client.key]`。既定ポートは 802。`--ca` がなければサーバー証明書は検証しない。Web UI と API のターゲットキーは `ca`、`certificate`、`private_key`（3 つの入力欄は種別 `tls` のときだけ表示）。
+
+`openssl` によるテスト用 PKI（テスト CA、サーバー証明書、ロール `operator` を持つクライアント証明書）:
+
+```bash
+# For testing only. Needs openssl; on Windows run it in Git Bash (add: export MSYS_NO_PATHCONV=1).
+mkdir pki && cd pki
+cat > ext.cnf <<'EOF'
+[server]
+basicConstraints = CA:FALSE
+subjectAltName = DNS:localhost,IP:127.0.0.1
+extendedKeyUsage = serverAuth
+[client]
+basicConstraints = CA:FALSE
+extendedKeyUsage = clientAuth
+1.3.6.1.4.1.50316.802.1 = ASN1:UTF8String:operator
+EOF
+# test CA
+openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt -days 365 -subj "/CN=Test CA" \
+  -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+# server certificate
+openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=localhost"
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 \
+  -extfile ext.cnf -extensions server
+# client certificate carrying the role "operator"
+openssl req -newkey rsa:2048 -nodes -keyout client.key -out client.csr -subj "/CN=operator1"
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 365 \
+  -extfile ext.cnf -extensions client
+```
 
 ### シリアル RTU（`type: rtu`）
 

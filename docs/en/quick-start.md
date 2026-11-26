@@ -88,7 +88,7 @@ requests/s) and print a summary with the estimated request count before asking `
 ```bash
 # discover readable addresses and guess datatypes -> user template (guesses as YAML comments)
 sme-modbus-sim scan --host 192.168.1.50 --unit 1 --range holding:0-199 --range input:0-99 --name meter1 -o meter1.yaml
-# serial RTU: --serial COM5 --baudrate 9600 --parity N; RTU over TCP: --transport rtu_over_tcp; Modbus UDP: --transport udp
+# serial RTU: --serial COM5 --baudrate 9600 --parity N; RTU over TCP: --transport rtu_over_tcp; Modbus UDP: --transport udp; Modbus/TCP Security: --transport tls [--ca ca.crt --cert client.crt --key client.key]
 
 # poll the points of a template (or -c site.yaml --device NAME) into a replay CSV
 sme-modbus-sim record --host 192.168.1.50 --unit 1 --template meter1.yaml --period 1 --duration 600 -o meter1.csv

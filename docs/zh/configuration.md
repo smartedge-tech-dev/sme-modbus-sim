@@ -33,8 +33,8 @@ devices:
 | 键 | 含义 |
 |---|---|
 | `id` | 供 `devices[].listeners` 引用的名称 |
-| `type` | `tcp`（Modbus TCP，MBAP）、`udp`（UDP 数据报中的 Modbus TCP / MBAP 帧）、`rtu_over_tcp`（TCP 套接字上带 CRC-16 的 RTU 帧）`rtu`（串口，RTU）或 `ascii`（串口，Modbus ASCII） |
-| `host`, `port` | `tcp` / `rtu_over_tcp`：绑定地址与 TCP 端口（默认 5020；1024 以下需要权限）。`udp`：绑定地址与 UDP 端口（1-65535，默认 5020）。`rtu` / `ascii`：`port` 为串口设备（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）或 `pty`（见下文），`host` 被忽略 |
+| `type` | `tcp`（Modbus TCP，MBAP）、`udp`（UDP 数据报中的 Modbus TCP / MBAP 帧）、`tls`（Modbus/TCP Security：TLS 之上的 MBAP）、`rtu_over_tcp`（TCP 套接字上带 CRC-16 的 RTU 帧）`rtu`（串口，RTU）或 `ascii`（串口，Modbus ASCII） |
+| `host`, `port` | `tcp` / `rtu_over_tcp`：绑定地址与 TCP 端口（默认 5020；1024 以下需要权限）。`udp`：绑定地址与 UDP 端口（1-65535，默认 5020）。`tls`：绑定地址与 TCP 端口（默认 8020；注册端口为 802）。`rtu` / `ascii`：`port` 为串口设备（`COM5`、`/dev/ttyUSB0`）、pyserial URL（`socket://host:port`、`rfc2217://...`）或 `pty`（见下文），`host` 被忽略 |
 | `unit_id_mode` | `strict`：只响应已配置的站号。`any`：所有站号都路由到 `default_unit` |
 | `unknown_unit` | `strict` 模式下：`ignore`（与真实总线一样不响应）或 `exception`（网关异常） |
 | `default_unit` | `any` 模式以及 TCP 站号 0 / 255 使用的站号 |
@@ -56,6 +56,68 @@ listeners:
 - 单元路由（`unit_id_mode`、`unknown_unit`、`default_unit`、单元 ID 0 / 255）与 `tcp` 相同。串口专用的键与 `tcp` 一样会被拒绝。
 - `udp` 与 `tcp` 监听器可以使用相同的 `host:port`；同一 `host:port` 上的两个 `udp` 监听器会被拒绝。
 - UDP 没有连接：统计和 UI 中的客户端数是最近 60 s 内出现过的不同源地址数。
+
+### Modbus/TCP Security（`type: tls`）
+
+```yaml
+listeners:
+  - id: secure
+    type: tls
+    port: 8020
+    certificate: pki/server.crt
+    private_key: pki/server.key
+    ca: pki/ca.crt
+    roles:
+      operator: all
+      viewer: read
+      tuner: [3, 6, 16]
+```
+
+- TLS 之上的 MBAP，遵循 "MB-TCP-Security v36 (2021-07-30)"。默认端口 8020（注册端口为 802；8020 无需权限，如同用 5020 代替 502）。
+- 以下键仅对 `type: tls` 有效。相对路径相对于配置文件。
+
+| 键 | 含义 |
+|---|---|
+| `certificate` | 服务器证书（PEM，可包含证书链）。必填 |
+| `private_key` | 服务器证书的私钥（PEM） |
+| `ca` | 用于验证客户端证书的 CA 证书（PEM） |
+| `client_auth` | 默认 `true`：必须出示客户端证书（规格 R-07 / R-08），因此也必须配置 `ca`。`false`：客户端证书可选 |
+| `crl` | 可选的 CRL（PEM），检查客户端证书本身（leaf）。需要 `ca` |
+| `roles` | 角色 -> `all`、`read` 或功能码列表（1-127）的映射。需要 `ca` |
+
+- 最低 TLS 1.2，允许 TLS 1.3。TLS 1.2 的密码套件限于 ECDHE 搭配 AES-GCM 或 ChaCha20（包含规格要求的 `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`）；不启用压缩。不检查客户端所连的主机名（规格没有定义检查）。
+- **角色。** 角色取自客户端证书中 OID 为 `1.3.6.1.4.1.50316.802.1` 的扩展（UTF8String）。该扩展必须是非 critical：OpenSSL 会拒绝带有未知 critical 扩展的证书，握手将失败（`CERTIFICATE_VERIFY_FAILED`）。
+- **授权。** 没有 `roles` 就不做授权。配置了 `roles` 时，列出的角色获得相应权限；未列出的角色或不带角色的证书只能读（FC 01、02、03、04 和 2B/0E）。被拒绝的请求返回异常 01（Illegal Function，规格 R-31），并在 trace 中记为 rx 事件，错误为 `not authorized (role 'x')` 或 `not authorized (no role)`；连接保持打开。授权只按功能码判断（规格的授权输入是角色与功能码），不按地址范围；并且在故障注入之前检查。
+- 握手失败会在 trace 中记为 rx 事件 "TLS handshake failed"（附原因），然后关闭连接。故障注入与 `tcp` 相同。
+- 只读客户端：`sme-modbus-sim scan` / `record`，参数 `--transport tls --host H [--port 802] [--ca ca.crt] [--cert client.crt --key client.key]`。默认端口 802；不带 `--ca` 则不验证服务器证书。Web UI 与 API 的目标键为 `ca`、`certificate`、`private_key`（这三个输入框仅在类型为 `tls` 时显示）。
+
+用 `openssl` 生成测试 PKI（测试 CA、服务器证书，以及带角色 `operator` 的客户端证书）：
+
+```bash
+# For testing only. Needs openssl; on Windows run it in Git Bash (add: export MSYS_NO_PATHCONV=1).
+mkdir pki && cd pki
+cat > ext.cnf <<'EOF'
+[server]
+basicConstraints = CA:FALSE
+subjectAltName = DNS:localhost,IP:127.0.0.1
+extendedKeyUsage = serverAuth
+[client]
+basicConstraints = CA:FALSE
+extendedKeyUsage = clientAuth
+1.3.6.1.4.1.50316.802.1 = ASN1:UTF8String:operator
+EOF
+# test CA
+openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt -days 365 -subj "/CN=Test CA" \
+  -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+# server certificate
+openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=localhost"
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 \
+  -extfile ext.cnf -extensions server
+# client certificate carrying the role "operator"
+openssl req -newkey rsa:2048 -nodes -keyout client.key -out client.csr -subj "/CN=operator1"
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 365 \
+  -extfile ext.cnf -extensions client
+```
 
 ### 串口 RTU（`type: rtu`）
 

@@ -87,7 +87,7 @@ client.close()
 ```bash
 # 読み取り可能なアドレスを探索してデータ型を推定 -> ユーザーテンプレート（推定は YAML コメント）
 sme-modbus-sim scan --host 192.168.1.50 --unit 1 --range holding:0-199 --range input:0-99 --name meter1 -o meter1.yaml
-# シリアル RTU: --serial COM5 --baudrate 9600 --parity N、RTU over TCP: --transport rtu_over_tcp、Modbus UDP: --transport udp
+# シリアル RTU: --serial COM5 --baudrate 9600 --parity N、RTU over TCP: --transport rtu_over_tcp、Modbus UDP: --transport udp、Modbus/TCP Security: --transport tls [--ca ca.crt --cert client.crt --key client.key]
 
 # テンプレート（または -c site.yaml --device NAME）のポイントを周期読み出しして replay 用 CSV に記録
 sme-modbus-sim record --host 192.168.1.50 --unit 1 --template meter1.yaml --period 1 --duration 600 -o meter1.csv

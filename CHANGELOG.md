@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Modbus UDP listener (`type: udp`): one MBAP ADU per datagram, answered to the sender; unit routing and fault injection as on TCP. The read-only scan / record client also speaks UDP (`--transport udp`, Web UI).
+- Modbus/TCP Security listener (`type: tls`, MB-TCP-Security v36): MBAP over TLS 1.2 / 1.3 with mutual authentication (`certificate`, `private_key`, `ca`, `client_auth`, `crl`) and role-based authorization from the client certificate role extension (`roles`; refused requests answer exception 01). The read-only scan / record client also speaks TLS (`--transport tls`, `--ca` / `--cert` / `--key`, Web UI).
 
 ## [0.2.0] - 2026-11-26
 

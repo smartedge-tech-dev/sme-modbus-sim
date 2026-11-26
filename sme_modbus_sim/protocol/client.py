@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import socket
+import ssl
 import struct
 import time
 from typing import Any, Callable, Dict, List, Optional
@@ -25,9 +26,10 @@ from typing import Any, Callable, Dict, List, Optional
 from .constants import MAX_READ_BITS, MAX_READ_REGISTERS, MEI_READ_DEVICE_ID
 from .errors import ModbusError
 from .framer import MbapFramer, RtuFramer, crc16
+from .tls import client_context
 
 READ_ONLY_FUNCTION_CODES = frozenset({0x01, 0x02, 0x03, 0x04, 0x2B})
-TRANSPORTS = ("tcp", "rtu_over_tcp", "udp", "rtu")
+TRANSPORTS = ("tcp", "rtu_over_tcp", "udp", "tls", "rtu")
 TABLE_FC = {"coil": 0x01, "discrete": 0x02, "holding": 0x03, "input": 0x04}
 
 # Read Device Identification object ids (Application Protocol V1.1b3 table 6.21)
@@ -89,7 +91,9 @@ class ModbusClient:
     def __init__(self, transport: str = "tcp", host: str = "127.0.0.1", port: Any = 502, *,
                  baudrate: int = 19200, bytesize: int = 8, parity: str = "E", stopbits: Optional[int] = None,
                  timeout: float = 1.0, rate: float = 10.0,
-                 serial_factory: Optional[Callable[..., Any]] = None) -> None:
+                 serial_factory: Optional[Callable[..., Any]] = None,
+                 ca: Optional[str] = None, certificate: Optional[str] = None,
+                 private_key: Optional[str] = None) -> None:
         if transport not in TRANSPORTS:
             raise ValueError(f"transport must be one of {', '.join(TRANSPORTS)}")
         if timeout <= 0:
@@ -106,6 +110,14 @@ class ModbusClient:
         self.timeout = float(timeout)
         self.rate = float(rate)
         self.serial_factory = serial_factory
+        self._ssl = None
+        if transport == "tls":  # Modbus/TCP Security: server verified against ca, client cert optional
+            try:
+                self._ssl = client_context(ca, certificate, private_key)
+            except (OSError, ssl.SSLError) as e:
+                raise ValueError(f"cannot load TLS ca / certificate / key: {getattr(e, 'strerror', None) or e}") from None
+        elif ca is not None or certificate is not None or private_key is not None:
+            raise ValueError("ca / certificate / private_key only apply to transport tls")
         self.requests = 0
         self._tid = 0
         self._last_send = 0.0
@@ -152,9 +164,11 @@ class ModbusClient:
             return
         try:
             self._reader, self._writer = await asyncio.wait_for(
-                asyncio.open_connection(self.host, int(self.port)), self.timeout)
+                asyncio.open_connection(self.host, int(self.port), ssl=self._ssl), self.timeout)
         except asyncio.TimeoutError:
             raise ResponseTimeout(f"connect to {self.host}:{self.port} timed out") from None
+        except ssl.SSLError as e:
+            raise ClientError(f"TLS handshake with {self.host}:{self.port} failed: {e.reason or e}") from None
         except OSError as e:
             raise ClientError(f"cannot connect to {self.host}:{self.port}: {e.strerror or e}") from None
 
@@ -251,7 +265,7 @@ class ModbusClient:
         async with self._lock:
             await self._throttle()
             self.requests += 1
-            if self.transport == "tcp":
+            if self.transport in ("tcp", "tls"):
                 resp = await self._tcp_exchange(unit, pdu)
             elif self.transport == "rtu_over_tcp":
                 resp = await self._rtu_tcp_exchange(unit, pdu)
