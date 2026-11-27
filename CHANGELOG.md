@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-27
+
+### Changed
+
+- Own icon: the browser-tab favicon and the README / docs logo now show a Modbus master polling slaves on a shared bus, instead of the building mark inherited from SME BACnetSim.
+
 ## [0.3.2] - 2026-11-26
 
 ### Fixed
