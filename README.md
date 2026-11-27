@@ -12,7 +12,8 @@
 
 <p align="center"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/en/live.gif" alt="Live register values, trend and Modbus traffic" width="100%"></p>
 
-A Modbus TCP / RTU device simulator with a live web UI. Simulate battery PCS, BMS, power meters, environment
+A free, open-source Modbus TCP / RTU slave (server) simulator with a live web UI, for Windows, Linux
+and Docker. Simulate battery PCS, BMS, power meters, environment
 sensors — or any register map you describe in YAML — and watch the values change in the browser while a real
 Modbus master (your EMS, a gateway, modpoll, pymodbus…) reads and writes them.
 
@@ -144,6 +145,19 @@ Released in 0.2.0: serial Modbus ASCII; built-in pty pair for serial testing wit
 Released in 0.3.0: Modbus UDP listener; Modbus/TCP Security (TLS) listener with client certificates and role-based authorization; UDP and TLS for the read-only scan / record client.
 
 > Not affiliated with, endorsed by, or certified by SunSpec Alliance. The `sunspec_pv_inverter` (models 1, 103, 120-123, 160) and `sunspec_meter` (models 1, 203), `sunspec_der` (models 1, 701-705) and `sunspec_battery` (models 1, 802, 803) templates are generated from the public SunSpec model definitions (Apache-2.0) and implement SunSpec Modbus models. No vendor register maps are built in; import your own privately via Excel or user-local templates.
+
+## More simulators from smart-edge
+
+SME ModbusSim is one of a series of free, MIT-licensed protocol simulators by smart-edge. They share the
+same web UI and conventions, so what you learn in one carries over to the others.
+
+| Simulator | What it simulates | Docs |
+|---|---|---|
+| [SME BACnetSim](https://github.com/smartedge-tech-dev/sme-bacnet-sim) | BACnet/IP device simulator | [Docs](https://smartedge-tech-dev.github.io/sme-bacnet-sim/) |
+| **SME ModbusSim** (this project) | Modbus TCP / RTU / UDP / TLS slave (server) simulator | [Docs](https://smartedge-tech-dev.github.io/sme-modbus-sim/) |
+| [SME OCPPSim](https://github.com/smartedge-tech-dev/sme-ocpp-sim) | OCPP 1.6J / 2.0.1 charging station (charge point) simulator | [Docs](https://smartedge-tech-dev.github.io/sme-ocpp-sim/) |
+
+All open-source tools from smart-edge: <https://smartedge-tech.com/open-source/>
 
 ## Commercial support & custom development
 

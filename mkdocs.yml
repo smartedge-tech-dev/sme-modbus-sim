@@ -1,6 +1,6 @@
 site_name: SME ModbusSim
 site_url: https://smartedge-tech-dev.github.io/sme-modbus-sim/
-site_description: A free, MIT-licensed Modbus TCP / RTU device simulator with a live web UI.
+site_description: Free, open-source Modbus slave (server) simulator with a live web UI for Windows, Linux and Docker. Modbus TCP, RTU, ASCII, UDP and TLS; test an EMS, SCADA or gateway without real devices.
 repo_url: https://github.com/smartedge-tech-dev/sme-modbus-sim
 repo_name: smartedge-tech-dev/sme-modbus-sim
 docs_dir: docs
@@ -39,7 +39,9 @@ plugins:
         - locale: ja
           name: 日本語
           build: true
+          site_description: 無料・オープンソースの Modbus スレーブ（サーバー）シミュレーター。Windows / Linux / Docker で動作し、Modbus TCP・RTU・ASCII・UDP・TLS に対応。実機なしで EMS・SCADA・ゲートウェイを試験できます。
           nav_translations:
+            Home: ホーム
             Getting started: はじめに
             Configuration: 設定
             Reference: リファレンス
@@ -47,7 +49,9 @@ plugins:
         - locale: zh
           name: 简体中文
           build: true
+          site_description: 免费开源的 Modbus 从站（Slave / Server）模拟器，带实时 Web UI，支持 Windows、Linux 和 Docker。支持 Modbus TCP、RTU、ASCII、UDP 和 TLS，无需真实设备即可测试 EMS、SCADA 或网关。
           nav_translations:
+            Home: 首页
             Getting started: 快速入门
             Configuration: 配置
             Reference: 参考
@@ -66,7 +70,7 @@ markdown_extensions:
       check_paths: true
 
 nav:
-  - index.md
+  - Home: index.md
   - Getting started:
       - quick-start.md
   - Configuration:
