@@ -12,7 +12,8 @@
 
 <p align="center"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/ja/live.gif" alt="レジスタのライブ値、トレンド、Modbus 通信ログ" width="100%"></p>
 
-ライブ Web UI 付きの Modbus TCP / RTU デバイスシミュレーターです。蓄電池 PCS、BMS、電力量計、環境センサー、
+ライブ Web UI 付きの、無料・オープンソース（MIT）の Modbus TCP / RTU スレーブ（サーバー）シミュレーターです。
+Windows / Linux / Docker で動作します。蓄電池 PCS、BMS、電力量計、環境センサー、
 あるいは YAML で記述した任意のレジスタマップを模擬し、実際の Modbus マスター（EMS、ゲートウェイ、modpoll、
 pymodbus など）が読み書きする様子を、値の変化とともにブラウザで確認できます。
 
@@ -147,6 +148,19 @@ client.close()
 0.3.0 でリリース済み: Modbus UDP リスナー、クライアント証明書とロールベース認可に対応した Modbus/TCP Security（TLS）リスナー、読み取り専用 scan / record クライアントの UDP / TLS 対応。
 
 > SunSpec Alliance とは提携・推奨・認証の関係にありません。`sunspec_pv_inverter`（モデル 1, 103, 120-123, 160）、`sunspec_meter`（モデル 1, 203）、`sunspec_der`（モデル 1, 701-705）、`sunspec_battery`（モデル 1, 802, 803）テンプレートは、公開されている SunSpec モデル定義（Apache-2.0）から生成した、SunSpec Modbus モデルを実装するものです。特定メーカーのレジスタマップは内蔵していません。お手元のマップは Excel またはユーザーローカルテンプレートで非公開のまま取り込めます。
+
+## smart-edge のシミュレータシリーズ
+
+SME ModbusSim は、smart-edge が公開している無料・MIT ライセンスのプロトコルシミュレータシリーズの 1 つです。
+Web UI と操作体系は共通なので、1 つ覚えれば他のシミュレータも同じ感覚で使えます。
+
+| シミュレータ | 対象 | ドキュメント |
+|---|---|---|
+| [SME BACnetSim](https://github.com/smartedge-tech-dev/sme-bacnet-sim) | BACnet/IP デバイスシミュレータ | [ドキュメント](https://smartedge-tech-dev.github.io/sme-bacnet-sim/ja/) |
+| **SME ModbusSim**（本プロジェクト） | Modbus TCP / RTU / UDP / TLS スレーブ（サーバー）シミュレーター | [ドキュメント](https://smartedge-tech-dev.github.io/sme-modbus-sim/ja/) |
+| [SME OCPPSim](https://github.com/smartedge-tech-dev/sme-ocpp-sim) | OCPP 1.6J / 2.0.1 充電器シミュレーター | [ドキュメント](https://smartedge-tech-dev.github.io/sme-ocpp-sim/ja/) |
+
+smart-edge のオープンソースツール一覧: <https://smartedge-tech.com/open-source/>
 
 ## 商用サポート・カスタム開発
 

@@ -12,7 +12,7 @@
 
 <p align="center"><img src="https://raw.githubusercontent.com/smartedge-tech-dev/sme-modbus-sim/main/docs/assets/screenshots/zh/live.gif" alt="寄存器实时值、趋势与 Modbus 通信日志" width="100%"></p>
 
-一个带实时 Web UI 的 Modbus TCP / RTU 设备模拟器。可以模拟储能 PCS、BMS、电能表、环境传感器，或任何用 YAML 描述的寄存器表，并在浏览器中观察数值变化，同时由真实的 Modbus 主站（你的 EMS、网关、modpoll、pymodbus……）读写这些设备。
+一个免费开源（MIT）、带实时 Web UI 的 Modbus TCP / RTU 从站（Slave / Server）模拟器（仿真软件），支持 Windows、Linux 和 Docker。可以模拟储能 PCS、BMS、电能表、环境传感器，或任何用 YAML 描述的寄存器表，并在浏览器中观察数值变化，同时由真实的 Modbus 主站（你的 EMS、网关、modpoll、pymodbus……）读写这些设备。
 
 - **一个端口承载多台设备。** 一个监听器可服务多个站号（unit ID），一台设备也可以挂在多个监听器上。Modbus TCP、Modbus UDP、Modbus/TCP Security（TLS）、Modbus RTU over TCP（用于串口网关）、串口 RTU 与串口 ASCII（COM 口 / tty）可同时使用。
 - **自研协议核心。** 支持功能码 01 / 02 / 03 / 04 / 05 / 06 / 0F / 10 / 16 / 17 / 2B-0E（十六进制），并返回标准异常响应；串口监听器另外支持诊断功能码 07 / 08 / 0B / 0C / 11。帧格式与 Modbus TCP / RTU 兼容（MBAP、CRC-16）。
@@ -131,6 +131,18 @@ Windows exe、多架构 Docker、离线包。
 已在 0.3.0 中发布：Modbus UDP 监听器；Modbus/TCP Security（TLS）监听器，支持客户端证书和按 role 授权；只读 scan / record 客户端支持 UDP 和 TLS。
 
 > 与 SunSpec Alliance 无任何关联，未获其认可或认证。`sunspec_pv_inverter`（模型 1、103、120-123、160）、`sunspec_meter`（模型 1、203）、`sunspec_der`（模型 1、701-705）与 `sunspec_battery`（模型 1、802、803）模板由公开的 SunSpec 模型定义（Apache-2.0）生成，实现 SunSpec Modbus 模型。不内置任何厂商的寄存器表；自有厂商表可通过 Excel 或用户本地模板私下导入。
+
+## smart-edge 模拟器系列
+
+SME ModbusSim 是 smart-edge 免费、MIT 许可的协议模拟器系列之一。各模拟器共用同一套 Web UI 和操作方式，学会一个即可上手其他几个。
+
+| 模拟器 | 模拟对象 | 文档 |
+|---|---|---|
+| [SME BACnetSim](https://github.com/smartedge-tech-dev/sme-bacnet-sim) | BACnet/IP 设备模拟器 | [文档](https://smartedge-tech-dev.github.io/sme-bacnet-sim/zh/) |
+| **SME ModbusSim**（本项目） | Modbus TCP / RTU / UDP / TLS 从站（Slave）模拟器 | [文档](https://smartedge-tech-dev.github.io/sme-modbus-sim/zh/) |
+| [SME OCPPSim](https://github.com/smartedge-tech-dev/sme-ocpp-sim) | OCPP 1.6J / 2.0.1 充电桩模拟器 | [文档](https://smartedge-tech-dev.github.io/sme-ocpp-sim/zh/) |
+
+smart-edge 全部开源工具：<https://smartedge-tech.com/zh/open-source/>
 
 ## 商务支持与定制开发
 
