@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
-  <!-- App-icon version of static/favicon.svg: the same building + field bus mark on a navy tile -->
+  <!-- App-icon version of static/favicon.svg: the same master + bus + slaves mark on a navy tile -->
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#1d3a50"/>
@@ -7,8 +7,9 @@
     </linearGradient>
   </defs>
   <rect width="120" height="120" rx="26" fill="url(#tile)"/>
-  <g transform="translate(12 8.4) scale(2.4)">
-    <path d="M8 34V9h15v25M12 15h7M12 20.5h7M12 26h7M4 34h32M30.5 34V22" stroke="#ffffff" stroke-width="2.4"/>
-    <rect x="25.5" y="11" width="10" height="10" fill="#2a95ff"/>
+  <g transform="translate(12 10.8) scale(2.4)">
+    <path d="M20 14v6M4 20h32M8 20v6M20 20v6M32 20v6" stroke="#ffffff" stroke-width="2.4"/>
+    <path d="M5.2 27.2h5.6v5.6H5.2zM17.2 27.2h5.6v5.6h-5.6zM29.2 27.2h5.6v5.6h-5.6z" stroke="#ffffff" stroke-width="2.4"/>
+    <rect x="13" y="4" width="14" height="10" fill="#2a95ff"/>
   </g>
 </svg>

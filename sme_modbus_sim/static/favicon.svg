@@ -1,6 +1,6 @@
-<!-- Vendored from SME BACnetSim (ebd27ec) -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
-  <!-- SME BACnetSim mark: a building (navy) wired to a field bus, with one accent controller block -->
-  <path d="M8 34V9h15v25M12 15h7M12 20.5h7M12 26h7M4 34h32M30.5 34V22" stroke="#142b3c" stroke-width="2.4"/>
-  <rect x="25.5" y="11" width="10" height="10" fill="#087def"/>
+  <!-- SME ModbusSim mark: one master (accent block) on a shared bus line, polled by three slave devices (navy) -->
+  <path d="M20 14v6M4 20h32M8 20v6M20 20v6M32 20v6" stroke="#142b3c" stroke-width="2.4"/>
+  <path d="M5.2 27.2h5.6v5.6H5.2zM17.2 27.2h5.6v5.6h-5.6zM29.2 27.2h5.6v5.6h-5.6z" stroke="#142b3c" stroke-width="2.4"/>
+  <rect x="13" y="4" width="14" height="10" fill="#087def"/>
 </svg>
