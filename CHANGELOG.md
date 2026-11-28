@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows exe: started without `-c`, it loaded and saved the demo config inside the temporary PyInstaller extraction directory, so every change saved from the web UI was lost when the exe exited. It now uses `~/.sme-modbus-sim/config.yaml` (created from the bundled demo site on the first run), next to the user templates; recordings saved next to the config land there too. `-c FILE`, pip / pipx, the source tree and Docker are unchanged.
+
 ## [0.3.3] - 2026-11-27
 
 ### Changed
