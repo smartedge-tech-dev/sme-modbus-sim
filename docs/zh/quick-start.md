@@ -6,6 +6,8 @@
 
 从 [Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest) 下载
 `sme-modbus-sim-<version>-windows.exe` 并运行，浏览器会打开 <http://127.0.0.1:8081/>。
+不带 `-c` 启动时，exe 使用 `%USERPROFILE%\.sme-modbus-sim\config.yaml`（首次运行时由内置演示配置复制生成），
+因此用 **文件 > 保存** 保存的修改在重启后仍然保留。
 
 ## Docker
 
@@ -53,7 +55,7 @@ python -m venv .venv
 | 命令 / 选项 | 含义 |
 |---|---|
 | `sme-modbus-sim [run]` | 启动模拟器（`run` 可省略） |
-| `-c, --config FILE` | YAML 配置文件（默认 `configs/demo-site.yaml`） |
+| `-c, --config FILE` | YAML 配置文件（默认 `configs/demo-site.yaml`；Windows exe 为 `~/.sme-modbus-sim/config.yaml`） |
 | `--host 0.0.0.0` | Web UI 绑定地址（默认仅本机） |
 | `--http-port 8081` | Web UI 端口 |
 | `--no-browser` | 不自动打开浏览器 |

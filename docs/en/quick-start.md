@@ -7,6 +7,8 @@
 Download `sme-modbus-sim-<version>-windows.exe` from the
 [Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest) page and run it. The browser opens
 the UI at <http://127.0.0.1:8081/>.
+Without `-c` the exe uses `%USERPROFILE%\.sme-modbus-sim\config.yaml`, created from the bundled demo site on the
+first run, so **File > Save** keeps your changes across restarts.
 
 ## Docker
 
@@ -54,7 +56,7 @@ Python 3.11 or newer. Options:
 | Command / option | Meaning |
 |---|---|
 | `sme-modbus-sim [run]` | Start the simulator (`run` is the default) |
-| `-c, --config FILE` | YAML config (defaults to `configs/demo-site.yaml`) |
+| `-c, --config FILE` | YAML config (defaults to `configs/demo-site.yaml`; Windows exe: `~/.sme-modbus-sim/config.yaml`) |
 | `--host 0.0.0.0` | Web UI bind address (default localhost only) |
 | `--http-port 8081` | Web UI port |
 | `--no-browser` | Do not open the browser |

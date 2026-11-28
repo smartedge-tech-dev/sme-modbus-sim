@@ -61,6 +61,8 @@ SME ModbusSim は無料の MIT ライセンスで、[smart-edge（智届科技�
 
 [Releases](https://github.com/smartedge-tech-dev/sme-modbus-sim/releases/latest) から `sme-modbus-sim-<version>-windows.exe`
 をダウンロードして実行します。ブラウザで http://127.0.0.1:8081/ が開きます。
+`-c` を付けずに起動すると `%USERPROFILE%\.sme-modbus-sim\config.yaml` を使います（初回起動時に同梱のデモ構成から
+作成）。**ファイル > 保存** した変更は再起動後も残ります。
 
 ### Docker
 
@@ -107,7 +109,7 @@ http://127.0.0.1:8081/ を開きます。Python 3.11 以上が必要です。
 | コマンド / オプション | 内容 |
 |---|---|
 | `sme-modbus-sim [run]` | シミュレーターを起動します（`run` は省略可） |
-| `-c, --config FILE` | YAML 設定ファイル（既定: `configs/demo-site.yaml`） |
+| `-c, --config FILE` | YAML 設定ファイル（既定: `configs/demo-site.yaml`、Windows exe は `~/.sme-modbus-sim/config.yaml`） |
 | `--host 0.0.0.0` | Web UI のバインドアドレス（既定はローカルホストのみ） |
 | `--http-port 8081` | Web UI のポート |
 | `--no-browser` | ブラウザを開きません |
